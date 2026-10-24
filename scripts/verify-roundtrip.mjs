@@ -138,8 +138,16 @@ const legacyPage = legacyDoc.addPage([612, 792])
 const legacyFont = await legacyDoc.embedFont(StandardFonts.Helvetica)
 legacyPage.drawText('LEGACY TEXT', { x: 72, y: 720, size: 18, font: legacyFont })
 const legacyImage = await legacyDoc.embedPng(png)
-legacyPage.drawImage(legacyImage, { x: 150, y: 380, width: 36, height: 36 })
-legacyPage.contentStream.dict.set(PDFName.of('PDFPingWheel'), PDFName.of('Baked'))
+// Model the v1 format faithfully: the plugin image lived in its own tagged
+// content stream, separate from the user's original page text.
+const legacyImageStream = legacyDoc.context.stream(
+  new TextEncoder().encode('q\\n36 0 0 36 150 380 cm\\n/Im0 Do\\nQ\\n'),
+  {
+    Resources: { XObject: { Im0: legacyImage.ref } },
+    PDFPingWheel: PDFName.of('Baked'),
+  },
+)
+legacyPage.node.addContentStream(legacyDoc.context.register(legacyImageStream))
 const legacyInfo = legacyDoc.context.obj({})
 legacyDoc.context.trailerInfo.Info = legacyDoc.context.register(legacyInfo)
 legacyInfo.set(PDFName.of('PDFPingWheel'), PDFHexString.fromText(JSON.stringify({
