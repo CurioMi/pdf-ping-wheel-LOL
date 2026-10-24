@@ -12,7 +12,7 @@
 - **聊天式备注**：按 `Enter` 打开，按 `Enter` 发送，`Shift+Enter` 换行，`Esc` 关闭。
 - **原生 PDF 注释**：标记可移动、删除；备注可双击编辑。保存后重新打开 PDF，仍可读取标记及备注。
 - **本地处理**：PDF 内容在本机处理，扩展不会主动上传用户的 PDF。
-- **素材回退**：未导入自定义图像或音频时，使用内置的原创矢量／表情回退与合成提示音。
+- **游戏素材**：GitHub Release 安装包预置 9 种游戏信号图标与提示音、9 个表情和 1 个亮牌图标；源码仓库不直接提交这些游戏资产。本地从源码构建时若未提供素材，仍会使用原创回退图标与合成提示音。
 
 ## 安装和运行
 
@@ -57,14 +57,14 @@ npm run verify:pdf
 
 ## 自定义素材
 
-公开源码和预构建包**不包含 Riot Games 的原版图像、表情、亮牌或音效，也不提供自动下载这些素材的脚本**。如果你有权使用某些本地素材，可以自行将文件放入构建后的 `dist/riot/` 对应目录：
+GitHub 源码仓库不直接保存原版游戏素材；正式 Release 会在构建时下载并预置 9 种游戏信号图标与提示音、9 个表情及 1 个亮牌图标。若从源码本地构建，默认仍使用回退图标与合成提示音；如需在本地构建中使用游戏素材，可将有权使用的文件放入 `public/riot/` 对应目录后再运行 `npm run build`。
 
 - `textures/`：信号 PNG 图像
 - `sounds/`：信号 WAV 音效
 - `emotes/`：表情 PNG 图像
 - `mastery/`：亮牌 PNG 图像
 
-文件名与类型映射可参考 `src/pings.js` 和 `public/riot/ASSET_MAP.json`。添加素材后，在浏览器扩展管理页重新加载扩展。没有这些文件时，插件仍会使用回退图标与合成提示音。
+素材文件名可参考 `src/pings.js` 和 `public/riot/ASSET_MAP.json`。扩展运行时不会从远程网站加载游戏素材；所有已打包素材均从本地文件读取。
 
 ## PDF 保存格式
 
@@ -79,7 +79,7 @@ npm run verify:pdf
 
 - PDF 文件由用户在本地打开并在本地处理；扩展不主动上传文档。
 - 扩展运行时不从外部网站加载游戏素材。
-- 自定义素材由用户自行提供；请确认你有权使用和分享所添加的文件。
+- Release 安装包中的 Riot Games 游戏素材归 Riot Games 及／或其相应权利人所有，不属于本项目 MIT 源码许可证；本地替换素材前请确认你有权使用和分享。
 - 加密或需要密码才能打开的 PDF 暂不支持。
 
 ## 反馈与贡献
@@ -91,6 +91,12 @@ npm run verify:pdf
 本项目原创源码与原创图标采用 [MIT License](LICENSE)。该许可证不涵盖第三方依赖、第三方运行时文件或用户自行导入的素材；它们仍分别受各自许可证或权利人条款约束。第三方依赖由 npm 按锁定版本安装；其许可证随对应依赖包分发。
 
 Riot Games、League of Legends 及相关游戏资产属于其各自权利人。本项目为非官方独立工具，不代表 Riot Games，也不声称拥有游戏资产权利。项目名称和快捷键描述仅用于说明功能与兼容性。
+
+本项目依据 Riot Games 的 “Legal Jibber Jabber” 政策，使用 Riot Games 所有的游戏素材创建。Riot Games 不认可、不赞助本项目。
+
+This project was created under Riot Games' "Legal Jibber Jabber" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.
+
+游戏素材不属于本项目的 MIT 源码许可证。本项目按免费、非商业的独立粉丝项目形式分享；商业使用前请取得相关权利人的许可。
 
 ## 目录结构
 
