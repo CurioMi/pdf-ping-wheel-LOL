@@ -1,0 +1,68 @@
+name: Publish v1.5.2 install ZIP
+
+on:
+  push:
+    paths:
+      - '.github/release-trigger-v1.5.2.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build extension
+        run: npm run build
+      - name: Verify PDF roundtrip
+        run: npm run verify
+      - name: Verify static behavior
+        run: npm run verify:static
+      - name: Verify PDF annotations and migration
+        run: npm run verify:pdf
+      - name: Package install ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "release/PDF Ping Wheel v1.5.2"
+          cp -R dist "release/PDF Ping Wheel v1.5.2/dist"
+          cp LICENSE "release/PDF Ping Wheel v1.5.2/LICENSE"
+          cp "安装与升级说明.md" "release/PDF Ping Wheel v1.5.2/安装与升级说明.md"
+          (cd release && zip -qr "$RUNNER_TEMP/PDF_Ping_Wheel_Chrome_v1.5.2_安装包.zip" "PDF Ping Wheel v1.5.2")
+          test -s "$RUNNER_TEMP/PDF_Ping_Wheel_Chrome_v1.5.2_安装包.zip"
+      - name: Create GitHub Release and upload ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v1.5.2
+          ASSET: ${{ runner.temp }}/PDF_Ping_Wheel_Chrome_v1.5.2_安装包.zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          ## PDF Ping Wheel v1.5.2
+
+          Chrome / Edge extension package for local PDF annotation with game-style pings, emotes, mastery mark and chat-like notes.
+
+          ### Install
+          1. Download and extract PDF_Ping_Wheel_Chrome_v1.5.2_安装包.zip.
+          2. Open chrome://extensions in Chrome or edge://extensions in Edge.
+          3. Enable Developer mode.
+          4. Click Load unpacked and select the PDF Ping Wheel v1.5.2/dist folder containing manifest.json.
+
+          The public package does not include Riot Games original artwork or sound files. This is an independent, unofficial project.
+
+          Automated build, PDF round-trip, static checks and PDF annotation migration tests must pass before the release asset is uploaded.
+          EOF
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "$ASSET" --repo "$GITHUB_REPOSITORY" --title "PDF Ping Wheel v1.5.2" --notes-file "$RUNNER_TEMP/release-notes.md" --target "$GITHUB_SHA"
+          fi

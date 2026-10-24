@@ -1,0 +1,1 @@
+One-time release trigger for PDF Ping Wheel v1.5.2. The release workflow builds, verifies, packages, and publishes the Chrome/Edge ZIP.
