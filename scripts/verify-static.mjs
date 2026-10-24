@@ -30,7 +30,7 @@ for (const p of STAMP_TYPES) {
   assert.equal(pingById(p.id),p)
 }
 const code = await readFile(join(dist,'assets/viewer.js'),'utf8')
-const sourceCode = await readFile(join(root,'src','viewer.js'),'utf8')
+const sourceCode = (await Promise.all(['viewer.js','pdf-io.js','pings.js','ping-assets.js'].map(file => readFile(join(root,'src',file),'utf8')))).join('\\n')
 const css = await readFile(join(dist,'assets/viewer.css'),'utf8')
 const html = await readFile(join(dist,'viewer.html'),'utf8')
 const manifest = JSON.parse(await readFile(join(dist,'manifest.json'),'utf8'))
