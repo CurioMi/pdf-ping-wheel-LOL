@@ -36,32 +36,46 @@ jobs:
           cp -R dist "release/PDF Ping Wheel v1.5.2/dist"
           cp LICENSE "release/PDF Ping Wheel v1.5.2/LICENSE"
           cp "安装与升级说明.md" "release/PDF Ping Wheel v1.5.2/安装与升级说明.md"
-          (cd release && zip -qr "$RUNNER_TEMP/PDF_Ping_Wheel_Chrome_v1.5.2_安装包.zip" "PDF Ping Wheel v1.5.2")
-          test -s "$RUNNER_TEMP/PDF_Ping_Wheel_Chrome_v1.5.2_安装包.zip"
-      - name: Create GitHub Release and upload ZIP
+          (cd release && zip -qr "$RUNNER_TEMP/PDF_Ping_Wheel_Chrome_v1.5.2.zip" "PDF Ping Wheel v1.5.2")
+          test -s "$RUNNER_TEMP/PDF_Ping_Wheel_Chrome_v1.5.2.zip"
+      - name: Create or update GitHub Release and upload ZIP
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: v1.5.2
-          ASSET: ${{ runner.temp }}/PDF_Ping_Wheel_Chrome_v1.5.2_安装包.zip
+          ASSET: ${{ runner.temp }}/PDF_Ping_Wheel_Chrome_v1.5.2.zip
         shell: bash
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
           ## PDF Ping Wheel v1.5.2
 
-          Chrome / Edge extension package for local PDF annotation with game-style pings, emotes, mastery mark and chat-like notes.
+          ### 中文介绍
+          面向 Chrome / Edge 的本地 PDF 标注扩展。支持游戏风格信号、表情、亮牌和聊天式备注，并将标记保存为 PDF 注释。
 
-          ### Install
-          1. Download and extract PDF_Ping_Wheel_Chrome_v1.5.2_安装包.zip.
-          2. Open chrome://extensions in Chrome or edge://extensions in Edge.
-          3. Enable Developer mode.
-          4. Click Load unpacked and select the PDF Ping Wheel v1.5.2/dist folder containing manifest.json.
+          **安装方法**
+          1. 下载并解压 `PDF_Ping_Wheel_Chrome_v1.5.2.zip`。
+          2. 打开 Chrome 的 `chrome://extensions` 或 Edge 的 `edge://extensions`。
+          3. 开启“开发者模式”。
+          4. 点击“加载已解压的扩展程序”，选择解压目录中包含 `manifest.json` 的 `PDF Ping Wheel v1.5.2/dist` 文件夹。
 
-          The public package does not include Riot Games original artwork or sound files. This is an independent, unofficial project.
+          **说明：** 公开版本不包含 Riot Games 原版图片或音效，也不提供自动下载脚本。本项目为独立的非官方工具。
 
-          Automated build, PDF round-trip, static checks and PDF annotation migration tests must pass before the release asset is uploaded.
+          ### English Description
+          A local PDF annotation extension for Chrome and Edge. It brings game-style pings, emotes, a mastery-style mark, and chat-like notes to PDF reading, saving markers as PDF annotations.
+
+          **Installation**
+          1. Download and extract `PDF_Ping_Wheel_Chrome_v1.5.2.zip`.
+          2. Open `chrome://extensions` in Chrome or `edge://extensions` in Edge.
+          3. Enable **Developer mode**.
+          4. Click **Load unpacked** and select the `PDF Ping Wheel v1.5.2/dist` folder containing `manifest.json`.
+
+          **Note:** The public package does not include original Riot Games images or sounds and does not provide an automatic downloader. This is an independent, unofficial project and is not affiliated with or endorsed by Riot Games.
+
+          The ZIP is built only after the automated build, PDF round-trip, static checks, and PDF annotation migration tests pass.
           EOF
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "PDF Ping Wheel v1.5.2" --notes-file "$RUNNER_TEMP/release-notes.md"
+            gh release delete-asset "$TAG" "PDF_Ping_Wheel_Chrome_v1.5.2_.zip" --yes --repo "$GITHUB_REPOSITORY" || true
             gh release upload "$TAG" "$ASSET" --clobber --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$TAG" "$ASSET" --repo "$GITHUB_REPOSITORY" --title "PDF Ping Wheel v1.5.2" --notes-file "$RUNNER_TEMP/release-notes.md" --target "$GITHUB_SHA"
