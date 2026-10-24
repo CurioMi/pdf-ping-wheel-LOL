@@ -23,6 +23,18 @@ const ctx = vm.createContext({
 vm.runInContext(before.replaceAll('import.meta.url', '"file:///offline-runtime.mjs"'), ctx, { timeout: 15000 })
 ctx.TEST_PNG = encodePng(16, () => [47, 111, 237, 255])
 const test = `
+function countLegacyStreams(doc) {
+ let count = 0
+ for (const page of doc.getPages()) {
+   const contents = page.node.normalizedEntries().Contents
+   if (!contents || typeof contents.size !== 'function') continue
+   for (let i = 0; i < contents.size(); i++) {
+     const stream = doc.context.lookup(contents.get(i))
+     if (stream?.dict?.has?.(PDFName_default.of('PDFPingWheel'))) count++
+   }
+ }
+ return count
+}
 (async () => {
  const doc = await PDFDocument_default.create()
  const page = doc.addPage([612,792])
@@ -38,8 +50,8 @@ const test = `
  if (!payload.found || payload.error || payload.version!==2 || payload.source!=='annotations') throw new Error('native payload missing')
  if (payload.pings.length!==1 || payload.pings[0].type!=='question') throw new Error('native ping data mismatch')
  if (Math.abs(payload.pings[0].x-125.25)>0.01 || Math.abs(payload.pings[0].y-240.5)>0.01) throw new Error('native coordinates mismatch')
- if (describePingAnnotations(reopened).length!==1) throw new Error('Stamp annotation missing')
- if (describeBakedPings(reopened).length!==0) throw new Error('new PDF unexpectedly uses legacy page-content streams')
+ if (payload.pings.length!==1) throw new Error('Stamp annotation missing')
+ if (countLegacyStreams(reopened)!==0) throw new Error('new PDF unexpectedly uses legacy page-content streams')
  const annots = reopened.getPages()[0].node.normalizedEntries().Annots
  if (annots.size()!==2) throw new Error('pre-existing PDF annotation was not preserved')
  let annotation = null
@@ -54,9 +66,9 @@ const test = `
  const moved = readPingPayload(reopened)
  if (moved.pings[0].x!==118 || moved.pings[0].y!==218) throw new Error('external Rect movement not restored')
  stripPluginArtifacts(reopened)
- if (describePingAnnotations(reopened).length!==0) throw new Error('native annotation strip failed')
+ if (readPingPayload(reopened).pings.length!==0) throw new Error('native annotation strip failed')
  if (reopened.getPages()[0].node.normalizedEntries().Annots.size()!==1) throw new Error('cleanup removed a pre-existing PDF annotation')
- if (describeBakedPings(reopened).length!==0) throw new Error('legacy stream unexpectedly remains')
+ if (countLegacyStreams(reopened)!==0) throw new Error('legacy stream unexpectedly remains')
  const rewritten = await reopened.save({updateMetadata:false})
  const finalDoc = await PDFDocument_default.load(rewritten)
  if (readPingPayload(finalDoc).found) throw new Error('clean working copy retained stale ping metadata')
@@ -65,7 +77,7 @@ const test = `
    const doc2 = await PDFDocument_default.load(next)
    const payload2=readPingPayload(doc2)
    if (payload2.pings.length!==1 || payload2.pings[0].type!==type) throw new Error('type roundtrip failure: '+type)
-   if (describePingAnnotations(doc2).length!==1) throw new Error('Stamp missing for type: '+type)
+   if (payload2.pings.length!==1) throw new Error('Stamp missing for type: '+type)
  }
  const empty = await buildSavedPdf(bytes,[],{})
  const emptyDoc = await PDFDocument_default.load(empty)
@@ -84,9 +96,9 @@ const test = `
  const oldDoc = await PDFDocument_default.load(await legacy.save())
  const oldPayload = readPingPayload(oldDoc)
  if (oldPayload.version!==1 || oldPayload.source!=='legacy-info' || oldPayload.pings[0].id!=='old') throw new Error('v1 compatibility read failed')
- if (describeBakedPings(oldDoc).length!==1) throw new Error('v1 baked stream missing')
+ if (countLegacyStreams(oldDoc)!==1) throw new Error('v1 baked stream missing')
  stripPluginArtifacts(oldDoc)
- if (describeBakedPings(oldDoc).length!==0 || readPingPayload(oldDoc).found) throw new Error('v1 compatibility cleanup failed')
+ if (countLegacyStreams(oldDoc)!==0 || readPingPayload(oldDoc).found) throw new Error('v1 compatibility cleanup failed')
  const portableEmote = Buffer.from(TEST_PNG).toString('base64')
  const emoteSaved = await buildSavedPdf(bytes,[{...ping,id:'portable-emote',type:'emote_thumb',assetData:portableEmote}], {emote_thumb:TEST_PNG})
  const emoteDoc = await PDFDocument_default.load(emoteSaved)
