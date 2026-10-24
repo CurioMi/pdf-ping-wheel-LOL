@@ -41,7 +41,8 @@ const clean = await source.save()
 
 const ping = { id: 'ping-1', page: 0, x: 180.25, y: 400.5, type: 'caution' }
 const saved = await buildSavedPdf(clean, [ping], pngByType)
-assert(Buffer.from(saved).includes(Buffer.from('PDFPingWheel')), 'metadata name missing from saved bytes')
+// PDF objects may be compressed into object streams, so raw-byte substring checks are brittle.
+// The parsed payload and annotation assertions below verify the actual metadata.
 
 const baked = await PDFDocument.load(saved)
 const payload = readPingPayload(baked)
