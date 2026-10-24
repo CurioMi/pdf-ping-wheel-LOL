@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+ <title>PDF Ping Wheel icon - navy radar PDF and yellow question mark</title>
+ <defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#14396c"/><stop offset="1" stop-color="#07172e"/></linearGradient>
+  <linearGradient id="page" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff"/><stop offset="1" stop-color="#b4cbf1"/></linearGradient>
+  <linearGradient id="coin" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffed90"/><stop offset=".5" stop-color="#ffbf2a"/><stop offset="1" stop-color="#e69812"/></linearGradient>
+ </defs>
+ <rect x="5" y="5" width="502" height="502" rx="120" fill="url(#bg)"/>
+ <circle cx="256" cy="256" r="192" stroke="#3979ce" stroke-width="7" opacity=".7" fill="none"/>
+ <circle cx="256" cy="256" r="159" stroke="#24579b" stroke-width="4" opacity=".7" fill="none"/>
+ <g stroke="#65b0ff" stroke-width="12" stroke-linecap="round"><path d="M256 54v19 M256 439v19 M54 256h19 M439 256h19"/></g>
+ <path d="M176 130 Q158 130 158 150 V352 Q158 372 177 372 H320 Q334 372 334 357 V192 L270 130Z" fill="url(#page)"/>
+ <path d="M270 130V178 Q270 192 286 192H334" fill="#eef5ff" stroke="#d1ddf4" stroke-width="2"/>
+ <g stroke="#9db4d9" stroke-width="16" stroke-linecap="round"><path d="M192 208H252 M192 251H297 M192 294H270 M192 337H250"/></g>
+ <circle cx="338" cy="338" r="65" fill="url(#coin)" stroke="#ffdf66" stroke-width="4"/>
+ <path d="M317 319 C318 300 359 297 363 322 C367 339 347 340 340 352" stroke="#512e05" stroke-width="19" fill="none" stroke-linecap="round"/>
+ <circle cx="339" cy="372" r="10" fill="#512e05"/>
+</svg>

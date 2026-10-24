@@ -1,0 +1,20 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+*.pdf
+*.tgz
+# Original Riot art/audio are not open-source and should never be committed
+public/riot/textures/*
+public/riot/sounds/*
+!public/riot/textures/.gitkeep
+!public/riot/sounds/.gitkeep
+
+public/riot/emotes/*
+public/riot/mastery/*
+!public/riot/emotes/.gitkeep
+!public/riot/mastery/.gitkeep
+*.zip
+*.mp4
+*.mov
+*.webm

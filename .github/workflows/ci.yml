@@ -1,0 +1,22 @@
+name: Build and verify extension
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Build with npm dependencies
+        run: npm run build
+      - name: Verify PDF roundtrip with installed dependencies
+        run: npm run verify
+      - name: Verify standard build
+        run: npm run verify:static
+      - name: Verify native PDF annotations and migration
+        run: npm run verify:pdf

@@ -1,0 +1,125 @@
+[
+  {
+    "id": "danger",
+    "label": "危险／撤退",
+    "file_image": "pingwheel_retreatrender.png",
+    "file_audio": "SRP_12.wav",
+    "category": "ping"
+  },
+  {
+    "id": "push",
+    "label": "推进",
+    "file_image": "pingwheel_pushrender.png",
+    "file_audio": "SRP_9.wav",
+    "category": "ping"
+  },
+  {
+    "id": "arrive",
+    "label": "正在路上",
+    "file_image": "omw_cyan.png",
+    "file_audio": "OnMyWay.wav",
+    "category": "ping"
+  },
+  {
+    "id": "allin",
+    "label": "全力进攻",
+    "file_image": "png_all_in.png",
+    "file_audio": "SRP_4.wav",
+    "category": "ping"
+  },
+  {
+    "id": "assist",
+    "label": "请求协助",
+    "file_image": "png_assist_me_128x128.png",
+    "file_audio": "ComeHere.wav",
+    "category": "ping"
+  },
+  {
+    "id": "needvision",
+    "label": "需要视野",
+    "file_image": "mt11_18_vision.png",
+    "file_audio": "SRP_7.wav",
+    "category": "ping"
+  },
+  {
+    "id": "question",
+    "label": "敌人不见了",
+    "file_image": "png_enemymissing_128x128.png",
+    "file_audio": "MIA.wav",
+    "category": "ping"
+  },
+  {
+    "id": "enemyvision",
+    "label": "敌方有视野",
+    "file_image": "pingwheel_enemyvisionrender.png",
+    "file_audio": "AreaIsWarded.wav",
+    "category": "ping"
+  },
+  {
+    "id": "caution",
+    "label": "普通标记",
+    "file_image": "pingwheel_basicpingrender.png",
+    "file_audio": "Base.wav",
+    "category": "ping"
+  },
+  {
+    "id": "emote_thumb",
+    "label": "点赞",
+    "category": "emote",
+    "file_image": "thumb_happy_up_inventory.png"
+  },
+  {
+    "id": "emote_cupcake",
+    "label": "开心",
+    "category": "emote",
+    "file_image": "cupcake_happy_smiling_inventory.png"
+  },
+  {
+    "id": "emote_bee_angry",
+    "label": "生气蜜蜂",
+    "category": "emote",
+    "file_image": "em_bee_angry_inventory.png"
+  },
+  {
+    "id": "emote_bee_happy",
+    "label": "开心蜜蜂",
+    "category": "emote",
+    "file_image": "em_bee_happy_inventory.png"
+  },
+  {
+    "id": "emote_bee_sad",
+    "label": "难过蜜蜂",
+    "category": "emote",
+    "file_image": "em_bee_sad_inventory.png"
+  },
+  {
+    "id": "emote_pengu_blue",
+    "label": "蓝色企鹅",
+    "category": "emote",
+    "file_image": "em_hype_pengu_blue_inventory.png"
+  },
+  {
+    "id": "emote_pengu_orange",
+    "label": "橙色企鹅",
+    "category": "emote",
+    "file_image": "em_hype_pengu_orange_inventory.png"
+  },
+  {
+    "id": "emote_minion_shy",
+    "label": "害羞小兵",
+    "category": "emote",
+    "file_image": "em_minion_shy_inventory.png"
+  },
+  {
+    "id": "emote_penguin_dab",
+    "label": "企鹅 DAB",
+    "category": "emote",
+    "file_image": "penguin_meme_dab_inventory.png"
+  },
+  {
+    "id": "mastery",
+    "label": "亮牌／成就表情",
+    "category": "mastery",
+    "file_image": "mastery_icon_7.png"
+  }
+]

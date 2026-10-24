@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "PDF Ping Wheel",
+  "version": "1.5.2",
+  "description": "在 PDF 上使用英雄联盟风格快捷键放置信号、表情和亮牌，保存为原生 Stamp 注释，并支持 Enter 聊天式 PDF 备注。",
+  "minimum_chrome_version": "120",
+  "action": {
+    "default_title": "打开 PDF Ping Wheel",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PDF Ping Wheel</title>
+    <link rel="icon" href="./icons/icon32.png" />
+    <link rel="stylesheet" href="./assets/viewer.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="brand">
+        <img src="./icons/icon32.png" alt="" width="22" height="22" />
+        <span>PDF Ping Wheel</span>
+      </div>
+      <button id="open" type="button">打开</button>
+      <button id="save" type="button" disabled>保存</button>
+      <button id="mastery" type="button" disabled title="亮牌快捷键 Ctrl+6（若浏览器拦截，可点击此按钮）">亮牌 Ctrl+6</button>
+      <button id="chat-toggle" type="button" disabled title="按 Enter 输入并放置 PDF 备注">备注 Enter</button>
+      <span id="file-name" class="file">未打开文件</span>
+      <span id="asset-status" class="asset-status" title="原版游戏素材需要在本机单独安装">素材检测中…</span>
+      <div class="spacer"></div>
+      <div class="zoom">
+        <button id="zoom-out" type="button" disabled aria-label="缩小">−</button>
+        <span id="zoom-label">100%</span>
+        <button id="zoom-in" type="button" disabled aria-label="放大">+</button>
+        <button id="fit" type="button" disabled>适应宽度</button>
+      </div>
+    </header>
+    <p id="help" class="help">
+      按住 Alt 并移动鼠标选择信号；G 放置普通信号，V 放置危险标记；H 放置敌方有视野标记；问号在信号轮盘中选择“敌人不见了”。按住 T 选择表情，轻点 T 放置中心表情；Ctrl+6 亮牌。按 Enter 打开聊天式备注框，输入后 Enter 放置到鼠标所在的 PDF 页面，Shift+Enter 换行，Esc 关闭；双击备注可编辑。拖动标记移动，点选后 Delete 删除，Ctrl+Z 撤销。
+    </p>
+    <p id="status" class="status" aria-live="polite"></p>
+    <main id="stage">
+      <section id="empty" class="empty">
+        <h1>打开一份 PDF</h1>
+        <p>把文件拖到这里，或点击「打开」。标记写在页面坐标上，缩放和滚动都不会跑位。</p>
+        <div id="legend" class="legend"></div>
+        <button id="open-empty" type="button">选择 PDF</button>
+      </section>
+      <div id="pages" hidden></div>
+    </main>
+    <div id="wheel" hidden></div>
+    <section id="chat-composer" class="chat-composer" hidden aria-label="PDF 备注输入框">
+      <div class="chat-head">
+        <span id="chat-title">队伍聊天 · PDF 备注</span>
+        <span class="chat-hotkeys">Enter 发送 · Esc 关闭</span>
+      </div>
+      <textarea id="chat-input" rows="1" maxlength="300" placeholder="输入备注……"></textarea>
+      <div class="chat-foot">
+        <span id="chat-hint">Enter 发送 · Shift+Enter 换行 · Esc 关闭</span>
+        <div class="chat-actions">
+          <button id="chat-cancel" type="button">取消</button>
+          <button id="chat-send" type="button">发送</button>
+        </div>
+      </div>
+    </section>
+    <input id="file" type="file" accept="application/pdf,.pdf" hidden />
+    <script type="module" src="./assets/viewer.js"></script>
+  </body>
+</html>

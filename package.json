@@ -1,0 +1,21 @@
+{
+  "name": "pdf-ping-wheel",
+  "version": "1.5.2",
+  "private": true,
+  "type": "module",
+  "description": "PDF stamp editor with League-style ping, emote and mastery hotkeys using native editable Stamp annotations.",
+  "scripts": {
+    "build": "node scripts/make-icons.mjs && node scripts/build.mjs",
+    "verify:static": "node scripts/verify-static.mjs",
+    "verify": "node scripts/verify-roundtrip.mjs",
+    "exercise": "node scripts/exercise.mjs",
+    "verify:pdf": "node scripts/verify-pdf.mjs"
+  },
+  "dependencies": {
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "4.10.38"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}
