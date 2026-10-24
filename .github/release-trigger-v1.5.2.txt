@@ -1,1 +1,1 @@
-Rebuild v1.5.2 with bundled League of Legends in-game ping icons, sound effects, emotes, and mastery mark; update bilingual release notes and asset notice.
+Re-run v1.5.2 release packaging after updating static checks to allow a complete bundled asset set.

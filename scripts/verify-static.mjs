@@ -42,7 +42,7 @@ assert.equal(map.filter((x) => x.category === 'mastery').length, 1)
 const masteryAsset = map.find((x) => x.id === 'mastery')
 assert.equal(masteryAsset.file_image, 'mastery_icon_7.png')
 assert(map.every((x) => !('url_image' in x) && !('url_audio' in x)), 'public asset map must not publish third-party asset download URLs')
-// The public source repository intentionally contains no game-asset downloader scripts.
+// Root-level one-click asset installers are not shipped; the release workflow uses the repository's validated CI downloader.
 for (const path of ['install_riot_assets.ps1', 'install_riot_assets.sh', '安装原版素材.cmd']) {
   await assert.rejects(access(join(root, path)), `${path} must not be shipped in the public source repository`)
 }
@@ -74,14 +74,20 @@ assert(html.includes('id="chat-composer"') && html.includes('id="chat-input"') &
 assert(css.includes('.chat-composer') && css.includes('.note-stamp'))
 assert(sourceCode.includes('openChatComposer') && sourceCode.includes('submitChatNote') && sourceCode.includes('noteSvg'))
 assert(sourceCode.includes("event.key === 'Enter'"), 'Enter must open the chat-like note composer')
-assert.equal((await readdir(join(dist,'riot/textures'))).filter(x=>x.endsWith('.png')).length,0,
-  'No Riot ping images may ship in public release')
-assert.equal((await readdir(join(dist,'riot/sounds'))).filter(x=>x.endsWith('.wav')).length,0,
-  'No Riot ping sounds may ship in public release')
-assert.equal((await readdir(join(dist,'riot/emotes'))).filter(x=>x.endsWith('.png')).length,0,
-  'No Riot emotes may ship in public release')
-assert.equal((await readdir(join(dist,'riot/mastery'))).filter(x=>x.endsWith('.png')).length,0,
-  'No Riot mastery image may ship in public release')
+const assetCounts = {
+  textures: (await readdir(join(dist,'riot/textures'))).filter(x=>x.endsWith('.png')).length,
+  sounds: (await readdir(join(dist,'riot/sounds'))).filter(x=>x.endsWith('.wav')).length,
+  emotes: (await readdir(join(dist,'riot/emotes'))).filter(x=>x.endsWith('.png')).length,
+  mastery: (await readdir(join(dist,'riot/mastery'))).filter(x=>x.endsWith('.png')).length,
+}
+const bundledAssetCount = Object.values(assetCounts).reduce((sum,n)=>sum+n,0)
+if (bundledAssetCount > 0) {
+  assert.deepEqual(assetCounts, {textures:9, sounds:9, emotes:9, mastery:1},
+    'If game assets are bundled, the release must contain the complete validated asset set')
+} else {
+  assert.deepEqual(assetCounts, {textures:0, sounds:0, emotes:0, mastery:0},
+    'A source build without optional game assets must use fallbacks consistently')
+}
 for (const path of ['pdf.worker.min.mjs','cmaps','standard_fonts','licenses/pdfjs-LICENSE','licenses/pdf-lib-LICENSE.md']) await access(join(dist,path))
 for (const file of ['src/pings.js','src/ping-assets.js','src/viewer.js','src/pdf-io.js','dist/assets/viewer.js']) {
   const result=spawnSync('node',['--check',join(root,file)], {encoding:'utf8'})
