@@ -17,8 +17,9 @@
       <button id="save" type="button" disabled>保存</button>
       <button id="mastery" type="button" disabled title="亮牌快捷键 Ctrl+6（若浏览器拦截，可点击此按钮）">亮牌 Ctrl+6</button>
       <button id="chat-toggle" type="button" disabled title="按 Enter 输入并放置 PDF 备注">备注 Enter</button>
+      <button id="loot-open" type="button" title="查看战利品、配置表情轮盘和阅读任务">◇ 战利品</button>
       <span id="file-name" class="file">未打开文件</span>
-      <span id="asset-status" class="asset-status" title="原版游戏素材需要在本机单独安装">素材检测中…</span>
+      <span id="asset-status" class="asset-status" title="素材从本地安装包读取">素材检测中…</span>
       <div class="spacer"></div>
       <div class="zoom">
         <button id="zoom-out" type="button" disabled aria-label="缩小">−</button>
@@ -31,6 +32,7 @@
       按住 Alt 并移动鼠标选择信号；G 放置普通信号，V 放置危险标记；H 放置敌方有视野标记；问号在信号轮盘中选择“敌人不见了”。按住 T 选择表情，轻点 T 放置中心表情；Ctrl+6 亮牌。按 Enter 打开聊天式备注框，输入后 Enter 放置到鼠标所在的 PDF 页面，Shift+Enter 换行，Esc 关闭；双击备注可编辑。拖动标记移动，点选后 Delete 删除，Ctrl+Z 撤销。
     </p>
     <p id="status" class="status" aria-live="polite"></p>
+    <div class="reading-hud"><span id="reading-progress">阅读峡谷 · 开始一份文献，积累你的战利品</span><button id="reading-quests" type="button">查看任务 →</button></div>
     <main id="stage">
       <section id="empty" class="empty">
         <h1>打开一份 PDF</h1>

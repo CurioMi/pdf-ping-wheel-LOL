@@ -2,7 +2,19 @@
 
 **PDF Ping Wheel** 是一个面向 Chrome / Edge 的本地 PDF 标注扩展。它把游戏式快捷操作带入 PDF 阅读：快速放置信号、表情、亮牌和聊天式备注，并将标记保存为 PDF 原生 `/Stamp` 注释。
 
-> 当前源码版本：**v1.5.2**。这是独立的玩家风格工具，不是 Riot Games 官方产品，也未获 Riot Games 背书。
+> 当前源码版本：**v1.6.0 · 阅读峡谷**。这是独立的玩家风格工具，不是 Riot Games 官方产品，也未获 Riot Games 背书。
+
+## 战利品与阅读成长
+
+点击工具栏的 **◇ 战利品**，进入独立的游戏风格界面：
+
+- **2,423 个表情**：完整目录快照，包含英雄联盟与云顶之弈系列；支持中英文、编号搜索，以及已拥有/未解锁/收藏/已装备筛选。
+- **自定义九格轮盘**：先选位置，再点击装备；也可把卡片拖到轮盘上。中心位对应轻点 T，外圈八格对应按住 T 选择，配置自动保存。
+- **研究宝箱**：完成任务或升级获得宝箱，打开后从三个未拥有的表情中任选一个。也能用 100 研究精粹定向兑换喜欢的表情。
+- **阅读任务**：有效阅读 10/25 分钟、在三个不同页面保存标记、写下三条不同笔记，均有奖励；另有长期里程碑。后台、休眠、长时间无操作和查看战利品时暂停计时。
+- **本地成长存档**：初始九表情、300 精粹和一个宝箱；支持存档导出/导入。自由模式可直接装备全部表情，任务进度照常保留。
+
+任务的奖励、计时与去重规则，以及对 LOL 客户端的设计参考，见 [阅读峡谷设计](GAMEPLAY_DESIGN.md)。计时只能反映本地活动，不会判断是否理解论文。当前表情库为构建时快照，后续新增表情需更新安装包。
 
 ## 功能
 
@@ -12,7 +24,7 @@
 - **聊天式备注**：按 `Enter` 打开，按 `Enter` 发送，`Shift+Enter` 换行，`Esc` 关闭。
 - **原生 PDF 注释**：标记可移动、删除；备注可双击编辑。保存后重新打开 PDF，仍可读取标记及备注。
 - **本地处理**：PDF 内容在本机处理，扩展不会主动上传用户的 PDF。
-- **游戏素材**：GitHub Release 安装包预置 9 种游戏信号图标与提示音、9 个表情和 1 个亮牌图标；源码仓库不直接提交这些游戏资产。本地从源码构建时若未提供素材，仍会使用原创回退图标与合成提示音。
+- **游戏素材**：v1.6.0 完整素材包包含 9 种游戏信号图标与提示音、2,423 个表情和 1 个亮牌图标；源码仓库不直接提交这些游戏资产。未安装素材时，初始九表情仍有回退图标，新表情在藏品库提示需安装完整素材。
 
 ## 安装和运行
 
@@ -29,10 +41,12 @@
 
 ```bash
 npm install
+npm run assets:install # 可选：下载完整离线素材，约 161 MB 表情图片
 npm run build
 npm run verify
 npm run verify:static
 npm run verify:pdf
+npm run verify:progression
 ```
 
 构建完成后，在浏览器扩展管理页加载项目根目录下生成的 `dist/` 文件夹。
@@ -57,7 +71,7 @@ npm run verify:pdf
 
 ## 自定义素材
 
-GitHub 源码仓库不直接保存原版游戏素材；正式 Release 会在构建时下载并预置 9 种游戏信号图标与提示音、9 个表情及 1 个亮牌图标。若从源码本地构建，默认仍使用回退图标与合成提示音；如需在本地构建中使用游戏素材，可将有权使用的文件放入 `public/riot/` 对应目录后再运行 `npm run build`。
+GitHub 源码仓库不直接保存原版游戏素材。运行 `npm run assets:install` 可按已提交目录快照下载并校验信号、音效、完整表情和亮牌；维护者可用 `npm run assets:sync` 刷新表情目录并下载新增图片，再重新构建。也可将有权使用的替换文件放入 `public/riot/` 对应目录。
 
 - `textures/`：信号 PNG 图像
 - `sounds/`：信号 WAV 音效
@@ -65,6 +79,10 @@ GitHub 源码仓库不直接保存原版游戏素材；正式 Release 会在构�
 - `mastery/`：亮牌 PNG 图像
 
 素材文件名可参考 `src/pings.js` 和 `public/riot/ASSET_MAP.json`。扩展运行时不会从远程网站加载游戏素材；所有已打包素材均从本地文件读取。
+
+完整表情目录及来源校验信息见 `src/emote-catalog.json`。`public/riot/emotes/catalog-index.json` 由完整下载校验后生成。表情素材采用按需加载，PDF 只嵌入实际用到的图片。
+
+浏览器回归测试：安装 Playwright 的 Chromium（`npx playwright install chromium`）后运行 `npm run verify:ui`。也可设置 `BROWSER_BIN` 使用本机 Chromium 系浏览器。测试在独立资料目录运行，不使用日常浏览器存档。
 
 ## PDF 保存格式
 
@@ -92,9 +110,9 @@ GitHub 源码仓库不直接保存原版游戏素材；正式 Release 会在构�
 
 Riot Games、League of Legends 及相关游戏资产属于其各自权利人。本项目为非官方独立工具，不代表 Riot Games，也不声称拥有游戏资产权利。项目名称和快捷键描述仅用于说明功能与兼容性。
 
-本项目依据 Riot Games 的 “Legal Jibber Jabber” 政策，使用 Riot Games 所有的游戏素材创建。Riot Games 不认可、不赞助本项目。
+本项目不是 Riot Games 官方产品，未声称获得 Riot Games 授权、认可或赞助。Riot 的 [Legal Jibber Jabber](https://www.riotgames.com/en/legal) 第 3 条限制未经授权在游戏或应用中使用其 IP；免费或附加非官方声明不能替代使用许可。公开分发含游戏素材的版本前，应先确认适用授权。
 
-This project was created under Riot Games' "Legal Jibber Jabber" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.
+This project is unofficial and does not claim authorization, endorsement or sponsorship from Riot Games. Section 3 of Riot's [Legal Jibber Jabber](https://www.riotgames.com/en/legal) restricts unauthorized use of its IP in games and apps. Being free or including a disclaimer is not a substitute for permission. Confirm applicable authorization before publicly distributing a build containing game assets.
 
 游戏素材不属于本项目的 MIT 源码许可证。本项目按免费、非商业的独立粉丝项目形式分享；商业使用前请取得相关权利人的许可。
 

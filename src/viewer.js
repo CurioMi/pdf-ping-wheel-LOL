@@ -2,8 +2,7 @@ import * as pdfjs from 'pdfjs-dist'
 import {
   PINGS,
   WHEEL_PINGS,
-  EMOTE_CENTER,
-  WHEEL_EMOTES,
+  ALL_EMOTES,
   MASTERY,
   NOTE,
   NOTE_MAX_CHARS,
@@ -18,9 +17,11 @@ import {
   noteSvg,
   wrapNoteText,
 } from './pings.js'
-import { buildSavedPdf, readPingPayload, stripPluginArtifacts } from './pdf-io.js'
-import { hasSound, iconMarkup, wheelIconMarkup, originalPng, initializePingAssets, soundUrl } from './ping-assets.js'
+import { buildSavedPdf, readPingPayload, stripPluginArtifacts, readDocumentId } from './pdf-io.js'
+import { hasSound, iconMarkup, wheelIconMarkup, originalPng, ensureOriginalPng, initializePingAssets, soundUrl } from './ping-assets.js'
 import { PDFDocument } from 'pdf-lib'
+import { createProfileStore, wheelSpecs, createReadingClock, recordReading, recordSavedMarks, qualifyingNote, dayKey, PROFILE_KEY, STARTER_IDS } from './progression.js'
+import { mountLoot } from './loot-ui.js'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdf.worker.min.mjs', document.baseURI).href
 
@@ -47,9 +48,48 @@ const state = {
   chatOpen: false,
   chatAnchor: null,
   editingNoteId: null,
+  documentId: '',
+  documentGeneration: 0,
+  authoredIds: new Set(),
 }
 
 const pngCache = new Map()
+const readingClock = createReadingClock()
+let lastReadingInput = -Infinity
+let loot
+const profileStore = createProfileStore({
+  onChange: () => { loot?.refresh(); updateReadingHud() },
+  onError: () => loot?.notify('本地战利品存档无法读取，已保留原数据。请导出备份或导入有效存档。'),
+})
+
+const currentEmoteWheel = () => wheelSpecs(profileStore.get())
+const centerEmote = () => currentEmoteWheel()[0]
+const escapeLabel = text => String(text).replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'})[char])
+
+function readingActive() {
+  return Boolean(state.pdf && state.documentId && !document.hidden && document.hasFocus() && !loot?.isOpen() && performance.now() - lastReadingInput <= 120000)
+}
+function updateReadingHud() {
+  const p = profileStore.get(), day = p.days[dayKey()]
+  const status = readingActive() ? '阅读中' : state.pdf ? '计时暂停' : '等你开卷'
+  $('reading-progress').textContent = `Lv.${1 + Math.floor(p.xp / 200)} · ${status} · 今日 ${Math.floor((day?.ms || 0) / 60000)} 分钟 · 研究精粹 ${p.essence}`
+}
+async function hashBytes(bytes) {
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), n => n.toString(16).padStart(2, '0')).join('')
+}
+async function rewardSaved(snapshot, authored, documentId, generation) {
+  try {
+    const marks = await Promise.all(snapshot.filter(p => authored.has(p.id)).map(async p => ({
+      id: p.id, page: p.page,
+      noteHash: p.type === NOTE.id && qualifyingNote(p.text)
+        ? await hashBytes(new TextEncoder().encode(`${documentId}:${p.text.normalize('NFKC').replace(/\s+/gu, '')}`)) : '',
+    })))
+    if (!marks.length) return
+    const rewards = await profileStore.mutate(p => recordSavedMarks(p, documentId, marks))
+    if (generation === state.documentGeneration) for (const mark of marks) state.authoredIds.delete(mark.id)
+    if (rewards.length) loot.notify(`任务完成：${rewards.join('、')} · 奖励已进入战利品`)
+  } catch (error) { loot.notify(`PDF 已保存，但任务进度未保存：${error.message}`) }
+}
 
 const $ = (id) => document.getElementById(id)
 
@@ -104,7 +144,7 @@ function fillLegend() {
 }
 
 function wheelItems(mode) {
-  return mode === 'emote' ? WHEEL_EMOTES : WHEEL_PINGS
+  return mode === 'emote' ? currentEmoteWheel().slice(1) : WHEEL_PINGS
 }
 
 function buildWheel(mode = 'ping') {
@@ -126,16 +166,16 @@ function buildWheel(mode = 'ping') {
     return `
       <path class="slice" data-type="${stamp.id}" d="${wedge(cx, cy, inner, outer, a0, a1)}" fill="${stamp.color}"></path>
       <g class="slice-icon" data-type="${stamp.id}">${wheelIconMarkup(stamp, ix, iy, iconSize)}</g>
-      <text class="slice-label" data-type="${stamp.id}" x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" text-anchor="middle" dominant-baseline="middle">${stamp.label}</text>
+      <text class="slice-label" data-type="${stamp.id}" x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" text-anchor="middle" dominant-baseline="middle">${escapeLabel(stamp.label.length > 7 ? stamp.label.slice(0, 6) + '…' : stamp.label)}</text>
     `
   }).join('')
-  const center = mode === 'emote' ? wheelIconMarkup(EMOTE_CENTER, cx - 27, cy - 27, 54) : ''
+  const center = mode === 'emote' ? wheelIconMarkup(centerEmote(), cx - 27, cy - 27, 54) : ''
   $('wheel').innerHTML = `
     <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">
       <circle class="wheel-plate" cx="${cx}" cy="${cy}" r="${outer + 10}"></circle>
       ${parts}
       <circle class="wheel-hub" cx="${cx}" cy="${cy}" r="${inner - 8}"></circle>
-      ${mode === 'emote' ? `<g class="wheel-center-emote">${center}</g><text id="wheel-label" x="${cx}" y="${cy + 44}" text-anchor="middle" dominant-baseline="middle">${EMOTE_CENTER.label}</text>` : `<text id="wheel-label" x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle">取消</text>`}
+      ${mode === 'emote' ? `<g class="wheel-center-emote">${center}</g><text id="wheel-label" x="${cx}" y="${cy + 44}" text-anchor="middle" dominant-baseline="middle">${escapeLabel(centerEmote().label.slice(0, 8))}</text>` : `<text id="wheel-label" x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle">取消</text>`}
     </svg>
   `
   $('wheel').dataset.mode = mode
@@ -217,6 +257,11 @@ function layoutStamps() {
       el.style.lineHeight = `${18 * state.scale}px`
       el.style.padding = `${12 * state.scale}px ${12 * state.scale}px`
       el.addEventListener('dblclick', (event) => { event.preventDefault(); event.stopPropagation(); openChatComposer(ping.id) })
+    } else if (typeof ping.assetData === 'string' && /^[A-Za-z0-9+/]+={0,2}$/.test(ping.assetData)) {
+      const image = document.createElement('img')
+      image.src = `data:image/png;base64,${ping.assetData}`
+      image.alt = ''; image.draggable = false
+      el.append(image)
     } else {
       el.innerHTML = iconMarkup(spec)
     }
@@ -289,14 +334,23 @@ function base64ToBytes(base64) {
   return bytes
 }
 
-function addPing(type, page, x, y) {
+async function addPing(type, page, x, y) {
   const spec = pingById(type)
+  if (!spec || !state.pdf) return
+  const generation = state.documentGeneration
+  const loaded = await ensureOriginalPng(type)
+  if (generation !== state.documentGeneration) return
+  if (spec.category === 'emote' && !loaded && !STARTER_IDS.includes(type)) {
+    setStatus('此表情的本地图片不可用，请安装完整素材包')
+    return
+  }
   const ping = { id: crypto.randomUUID(), type, page, x, y, width: stampSize(type), height: stampSize(type) }
-  const bytes = originalPng(type)
+  const bytes = loaded || originalPng(type)
   // Keep one image copy per stamp type in the document metadata. This lets the
   // extension restore a Riot emote even on a machine without that asset pack.
   if (bytes && spec && spec.category !== 'ping') ping.assetData = bytesToBase64(bytes)
   state.pings.push(ping)
+  state.authoredIds.add(ping.id)
   state.undo.push({ op: 'stamp', ping: { ...ping } })
   if (state.undo.length > 100) state.undo.shift()
   state.selectedId = ping.id
@@ -342,6 +396,7 @@ function addNote(text, page, x, y, dimensions) {
     width: dimensions.width, height: dimensions.height, text,
   }
   state.pings.push(note)
+  state.authoredIds.add(note.id)
   state.undo.push({ op: 'stamp', ping: { ...note } })
   if (state.undo.length > 100) state.undo.shift()
   state.selectedId = note.id
@@ -518,7 +573,7 @@ function showWheel() {
 function paintWheel(type) {
   const label = $('wheel-label')
   const selected = type ? pingById(type) : null
-  if (label) label.textContent = selected ? selected.label : (state.alt?.mode === 'emote' ? '选择表情' : '取消')
+  if (label) label.textContent = selected ? (selected.label.length > 8 ? selected.label.slice(0, 7) + '…' : selected.label) : (state.alt?.mode === 'emote' ? '选择表情' : '取消')
   for (const el of document.querySelectorAll('#wheel .slice, #wheel .slice-icon, #wheel .slice-label')) {
     el.classList.toggle('is-hot', el.dataset.type === type)
   }
@@ -548,7 +603,7 @@ function beginAlt(mode = 'ping') {
   let point = null
   if (view) {
     const [rawX, rawY] = clientToPdf(view, state.pointer.x, state.pointer.y)
-    const [x, y] = clampPdf(view, rawX, rawY, mode === 'emote' ? EMOTE_CENTER.id : 'caution')
+    const [x, y] = clampPdf(view, rawX, rawY, mode === 'emote' ? centerEmote().id : 'caution')
     point = { page: view.index, x: round(x), y: round(y) }
   }
   const alt = {
@@ -589,7 +644,7 @@ function commitAlt() {
   const quick = dt <= QUICK_TAP_MS && dist <= QUICK_TAP_PX
   if (alt.mode === 'emote') {
     if (quick) {
-      addPing(EMOTE_CENTER.id, alt.page, alt.x, alt.y)
+      addPing(centerEmote().id, alt.page, alt.x, alt.y)
       return
     }
     if (alt.shown && alt.slice && dist >= WHEEL.inner) {
@@ -711,13 +766,19 @@ async function loadFile(file) {
     return
   }
   setStatus('正在打开…')
+  const generation = ++state.documentGeneration
+  state.documentId = ''
+  readingClock.reset()
+  closeChatComposer()
   dismissAlt()
   const raw = new Uint8Array(await file.arrayBuffer())
   let clean = raw
   let pings = []
   let payloadWarning = ''
+  let documentId = ''
   try {
     const doc = await PDFDocument.load(raw.slice(), { updateMetadata: false })
+    documentId = readDocumentId(doc) || await hashBytes(raw)
     const payload = readPingPayload(doc)
     if (payload.error) {
       setStatus('标记数据读不出来，只显示文件里已经画上的图案')
@@ -731,7 +792,10 @@ async function loadFile(file) {
     setStatus(`这份 PDF 打不开：${error?.message || error}`)
     return
   }
+  if (generation !== state.documentGeneration) return
   state.cleanBytes = clean.slice()
+  pngCache.clear()
+  state.authoredIds.clear()
   state.pings = pings
   state.undo = []
   state.selectedId = null
@@ -742,6 +806,11 @@ async function loadFile(file) {
     setStatus(`页面渲染失败：${error?.message || error}`)
     return
   }
+  if (generation !== state.documentGeneration) return
+  state.documentId = documentId
+  lastReadingInput = performance.now()
+  readingClock.activity(lastReadingInput)
+  updateReadingHud()
   const restored = pings.length ? `，已恢复 ${pings.length} 个标记` : ''
   const warning = payloadWarning ? `。${payloadWarning}` : ''
   setStatus(`已打开 ${state.fileName}${restored}${warning}`)
@@ -775,7 +844,7 @@ async function rasterize(ping) {
     const restored = base64ToBytes(ping.assetData)
     if (restored.length > 64 && restored[0] === 137 && restored[1] === 80 && restored[2] === 78 && restored[3] === 71) return restored
   }
-  const riotBytes = originalPng(ping.type)
+  const riotBytes = await ensureOriginalPng(ping.type)
   if (riotBytes) return riotBytes
   const spec = pingById(ping.type) || ping
   const size = 128
@@ -833,20 +902,24 @@ async function savePdf() {
   state.saving = true
   $('save').disabled = true
   setStatus('正在写入…')
+  const snapshot = state.pings.map(p => ({ ...p }))
+  const authored = new Set(state.authoredIds), documentId = state.documentId, generation = state.documentGeneration
+  const cleanBytes = state.cleanBytes, fileHandle = state.fileHandle, fileName = state.fileName
   try {
-    for (const ping of state.pings) {
+    for (const ping of snapshot) {
       const spec = pingById(ping.type)
-      const bytes = originalPng(ping.type)
+      const bytes = await ensureOriginalPng(ping.type)
       if (spec && spec.category !== 'ping' && !ping.assetData && bytes) ping.assetData = bytesToBase64(bytes)
     }
-    const bytes = new Uint8Array(await buildSavedPdf(state.cleanBytes, state.pings, await pngMap(state.pings)))
-    const name = /\.pdf$/i.test(state.fileName) ? state.fileName : `${state.fileName}.pdf`
-    if (state.fileHandle?.createWritable) {
+    const bytes = new Uint8Array(await buildSavedPdf(cleanBytes, snapshot, await pngMap(snapshot), { documentId }))
+    const name = /\.pdf$/i.test(fileName) ? fileName : `${fileName}.pdf`
+    if (fileHandle?.createWritable) {
       try {
-        const writable = await state.fileHandle.createWritable()
+        const writable = await fileHandle.createWritable()
         await writable.write(bytes)
         await writable.close()
         setStatus('已覆盖保存原文件')
+        await rewardSaved(snapshot, authored, documentId, generation)
         return
       } catch (error) {
         console.warn(error)
@@ -854,6 +927,7 @@ async function savePdf() {
     }
     downloadBytes(bytes, name)
     setStatus(`已下载 ${name}`)
+    await rewardSaved(snapshot, authored, documentId, generation)
   } catch (error) {
     setStatus(`保存失败：${error?.message || error}`)
   } finally {
@@ -887,6 +961,7 @@ async function zoomBy(factor) {
 }
 
 function onKeyDown(event) {
+  if (loot?.isOpen()) return
   if (event.key === 'Escape' && state.chatOpen) {
     event.preventDefault()
     event.stopPropagation()
@@ -967,6 +1042,7 @@ function onKeyDown(event) {
 }
 
 function onKeyUp(event) {
+  if (loot?.isOpen()) return
   if (isAltKey(event)) {
     event.preventDefault()
     event.stopPropagation()
@@ -981,6 +1057,7 @@ function onKeyUp(event) {
 }
 
 function onPointerMove(event) {
+  if (loot?.isOpen()) return
   state.pointer.x = event.clientX
   state.pointer.y = event.clientY
   if (state.chatOpen && !state.editingNoteId && !event.target?.closest?.('.chat-composer, .bar, .help, .status, #wheel')) {
@@ -996,6 +1073,30 @@ function onPointerMove(event) {
 }
 
 function wire() {
+  loot = mountLoot({ store: profileStore, onOpen: () => { dismissAlt(); closeChatComposer(); readingClock.reset(); updateReadingHud() }, onClose: () => { readingClock.reset(); updateReadingHud() } })
+  $('loot-open').addEventListener('click', () => loot.open())
+  $('reading-quests').addEventListener('click', () => loot.open('quests'))
+  for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel']) {
+    document.addEventListener(type, event => {
+      if (event.isTrusted && !loot.isOpen() && state.documentId) {
+        lastReadingInput = performance.now(); readingClock.activity(lastReadingInput)
+      }
+    }, { capture: true, passive: true })
+  }
+  document.addEventListener('visibilitychange', () => { readingClock.reset(); updateReadingHud() })
+  window.addEventListener('blur', () => { readingClock.reset(); updateReadingHud() })
+  window.addEventListener('storage', event => { if (event.key === PROFILE_KEY) profileStore.refresh() })
+  setInterval(async () => {
+    const ms = readingClock.tick(performance.now(), readingActive())
+    if (ms) {
+      try {
+        const rewards = await profileStore.mutate(p => recordReading(p, ms))
+        if (rewards.length) loot.notify(`任务完成：${rewards.join('、')} · 奖励已进入战利品`)
+      } catch (error) { loot.notify(`阅读进度未保存：${error.message}`) }
+    }
+    updateReadingHud()
+  }, 5000)
+  updateReadingHud()
   fillLegend()
   buildWheel()
   enableTools(false)
@@ -1004,7 +1105,9 @@ function wire() {
     fillLegend()
     buildWheel()
     layoutStamps()
-    setAssetStatus(`素材：信号 ${pings}/9、表情 ${emotes}/9、亮牌 ${mastery}/1、音效 ${sounds}/9`)
+    setAssetStatus(`素材：表情 ${emotes}/${ALL_EMOTES.length} · 信号 ${pings}/9`)
+    $('asset-status').title = `本地素材：亮牌 ${mastery}/1、音效 ${sounds}/9`
+    loot.refresh()
   }).catch((error) => console.warn('Local ping asset scan failed:', error))
   $('open').addEventListener('click', () => { openFromPicker() })
   $('open-empty').addEventListener('click', () => { openFromPicker() })
@@ -1049,6 +1152,7 @@ function wire() {
     loadFile(file)
   })
   document.addEventListener('pointerdown', (event) => {
+    if (loot?.isOpen()) return
     const clickedPage = event.button === 0 ? pageAt(event.clientX, event.clientY) : null
     if (state.alt?.mode === 'ping' && clickedPage) {
       const [rawX, rawY] = clientToPdf(clickedPage, event.clientX, event.clientY)

@@ -1,3 +1,5 @@
+import catalog from './emote-catalog.json' with { type: 'json' }
+
 /**
  * Signal, emote and mastery-stamp metadata. Existing ping IDs remain stable for
  * previously saved PDF files. Original Riot assets are user-installed only.
@@ -39,6 +41,14 @@ export const EMOTES = [
 ]
 export const EMOTE_CENTER = EMOTES[0]
 export const WHEEL_EMOTES = EMOTES.slice(1)
+export const CATALOG_INFO = { count: catalog.entries.length, updatedAt: catalog.updatedAt, excludedCount: catalog.excludedCount }
+const starterIds = new Set(EMOTES.map(e => e.id))
+export const ALL_EMOTES = [
+  ...EMOTES.map(e => ({ ...catalog.entries.find(row => row.id === e.id), ...e })),
+  ...catalog.entries.filter(e => !starterIds.has(e.id)).map(e => ({
+    ...e, category: 'emote', size: EMOTE_SIZE, color: '#456779', ink: '#ffffff', emoji: '✦',
+  })),
+]
 
 export const MASTERY = {
   id: 'mastery', label: '亮牌／成就表情', emoji: '★', color: '#b48b39', ink: '#fff6d6',
@@ -47,7 +57,8 @@ export const MASTERY = {
 // Notes are generated locally from user text; they do not need a downloaded game asset.
 export const NOTE = { id: 'note', label: '备注', color: '#fff2c9', ink: '#202733', category: 'note', size: 220 }
 export const NOTE_MAX_CHARS = 300
-export const STAMP_TYPES = [...PINGS, ...EMOTES, MASTERY]
+export const STAMP_TYPES = [...PINGS, ...ALL_EMOTES, MASTERY]
+const stampIndex = new Map(STAMP_TYPES.map(stamp => [stamp.id, stamp]))
 
 function noteCharUnits(char) {
   if (/\s/u.test(char)) return 0.32
@@ -111,7 +122,7 @@ const MARKS = {
   enemyvision: (ink) => `<path d="M9 32Q32 10 55 32Q32 54 9 32Z" fill="none" stroke="${ink}" stroke-width="4"/><path d="M15 15L49 49" stroke="${ink}" stroke-width="5" stroke-linecap="round"/>`,
 }
 
-export function pingById(id) { return STAMP_TYPES.find((p) => p.id === id) || (id === NOTE.id ? NOTE : null) }
+export function pingById(id) { return stampIndex.get(id) || (id === NOTE.id ? NOTE : null) }
 export function stampSize(pingOrId) {
   const spec = typeof pingOrId === 'string' ? pingById(pingOrId) : pingOrId
   return spec?.size || PING_SIZE
