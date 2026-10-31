@@ -3,7 +3,7 @@ import { readFile, access, readdir } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PINGS, WHEEL_PINGS, EMOTES, WHEEL_EMOTES, MASTERY, NOTE, STAMP_TYPES, pingById, pingBadgeSvg, noteLayout, noteSvg } from '../src/pings.js'
+import { PINGS, WHEEL_PINGS, EMOTES, ALL_EMOTES, WHEEL_EMOTES, MASTERY, NOTE, STAMP_TYPES, pingById, pingBadgeSvg, noteLayout, noteSvg } from '../src/pings.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const dist = join(root, 'dist')
@@ -12,7 +12,8 @@ assert.equal(PINGS.length, 9)
 assert.equal(WHEEL_PINGS.length, 8)
 assert.equal(EMOTES.length, 9)
 assert.equal(WHEEL_EMOTES.length, 8)
-assert.equal(STAMP_TYPES.length, 19)
+assert(ALL_EMOTES.length > 2000)
+assert.equal(STAMP_TYPES.length, ALL_EMOTES.length + 10)
 assert.equal(ids.size, STAMP_TYPES.length)
 assert.deepEqual(WHEEL_PINGS.map((p) => p.id),
   ['danger','push','arrive','allin','assist','needvision','question','enemyvision'])
@@ -35,7 +36,7 @@ const css = await readFile(join(dist,'assets/viewer.css'),'utf8')
 const html = await readFile(join(dist,'viewer.html'),'utf8')
 const manifest = JSON.parse(await readFile(join(dist,'manifest.json'),'utf8'))
 const map = JSON.parse(await readFile(join(dist,'riot/ASSET_MAP.json'),'utf8'))
-assert.equal(manifest.version, '1.5.2')
+assert.equal(manifest.version, '1.6.0')
 assert.equal(map.filter((x) => x.category === 'ping').length, 9)
 assert.equal(map.filter((x) => x.category === 'emote').length, 9)
 assert.equal(map.filter((x) => x.category === 'mastery').length, 1)
@@ -67,8 +68,8 @@ assert(sourceCode.includes('PDFPingWheel'))
 assert(sourceCode.includes("Subtype: 'Stamp'"), 'native Stamp annotation output missing')
 assert(sourceCode.includes('stripPluginArtifacts'), 'native/legacy cleanup missing')
 assert(sourceCode.includes('readPingAnnotations'), 'native annotation readback missing')
-assert(sourceCode.includes('WHEEL_EMOTES'))
-assert(!sourceCode.includes('https://raw.communitydragon.org') && !code.includes('https://raw.communitydragon.org'), 'Remote runtime asset loading is forbidden')
+assert(sourceCode.includes('currentEmoteWheel'))
+assert(!sourceCode.includes('https://raw.communitydragon.org'), 'Remote runtime asset loading is forbidden; catalog provenance URLs are metadata only')
 assert(css.includes('.emote-art') && html.includes('asset-status') && html.includes('mastery'))
 assert(html.includes('id="chat-composer"') && html.includes('id="chat-input"') && html.includes('chat-toggle'))
 assert(css.includes('.chat-composer') && css.includes('.note-stamp'))
@@ -77,20 +78,22 @@ assert(sourceCode.includes("event.key === 'Enter'"), 'Enter must open the chat-l
 const assetCounts = {
   textures: (await readdir(join(dist,'riot/textures'))).filter(x=>x.endsWith('.png')).length,
   sounds: (await readdir(join(dist,'riot/sounds'))).filter(x=>x.endsWith('.wav')).length,
-  emotes: (await readdir(join(dist,'riot/emotes'))).filter(x=>x.endsWith('.png')).length,
+  emotes: (await readdir(join(dist,'riot/emotes'), { recursive: true })).filter(x=>x.endsWith('.png')).length,
   mastery: (await readdir(join(dist,'riot/mastery'))).filter(x=>x.endsWith('.png')).length,
 }
 const bundledAssetCount = Object.values(assetCounts).reduce((sum,n)=>sum+n,0)
 if (bundledAssetCount > 0) {
-  assert.deepEqual(assetCounts, {textures:9, sounds:9, emotes:9, mastery:1},
+  assert.deepEqual(assetCounts, {textures:9, sounds:9, emotes:ALL_EMOTES.length, mastery:1},
     'If game assets are bundled, the release must contain the complete validated asset set')
 } else {
   assert.deepEqual(assetCounts, {textures:0, sounds:0, emotes:0, mastery:0},
     'A source build without optional game assets must use fallbacks consistently')
 }
 for (const path of ['pdf.worker.min.mjs','cmaps','standard_fonts','licenses/pdfjs-LICENSE','licenses/pdf-lib-LICENSE.md']) await access(join(dist,path))
-for (const file of ['src/pings.js','src/ping-assets.js','src/viewer.js','src/pdf-io.js','dist/assets/viewer.js']) {
+assert(html.includes('id="loot-open"'))
+assert(code.includes('createProfileStore') && code.includes('mountLoot'))
+for (const file of ['src/pings.js','src/ping-assets.js','src/viewer.js','src/pdf-io.js','src/progression.js','src/loot-ui.js','dist/assets/viewer.js']) {
   const result=spawnSync('node',['--check',join(root,file)], {encoding:'utf8'})
   assert.equal(result.status,0,`${file}: ${result.stderr}`)
 }
-console.log('PASS: native LoL-style shortcuts; chat-like Enter notes; 9 pings + 9 emotes + mastery; PDF metadata portability; local-only assets; syntax')
+console.log(`PASS: native shortcuts; chat notes; 9 pings + ${ALL_EMOTES.length} emotes + mastery; loot client; local-only assets; syntax`)

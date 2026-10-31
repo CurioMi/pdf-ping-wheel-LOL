@@ -165,4 +165,4 @@ stripPluginArtifacts(legacyReopened)
 assert.equal(describeBakedPings(legacyReopened).length, 0, 'legacy image stream not stripped')
 assert(pageText(legacyReopened).includes('LEGACY TEXT') || pageText(legacyReopened).includes('4C45474143592054455854'), 'legacy cleanup removed original text')
 
-console.log('PASS: native Stamp appearance, editable metadata, moved-Rect recovery, cleanup, 19 stamp types, portable emote image data, persistent text notes, empty save, and v1 compatibility')
+console.log(`PASS: native Stamp appearance, editable metadata, moved-Rect recovery, cleanup, ${STAMP_TYPES.length} stamp types, portable emote image data, persistent text notes, empty save, and v1 compatibility`)

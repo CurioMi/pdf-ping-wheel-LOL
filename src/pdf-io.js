@@ -19,6 +19,13 @@ const ID_KEY = PDFName.of('id')
 const TYPE_KEY = PDFName.of('type')
 const X_KEY = PDFName.of('x')
 const Y_KEY = PDFName.of('y')
+const DOCUMENT_KEY = PDFName.of('PDFPingWheelDocument')
+
+export function readDocumentId(pdfDoc) {
+  const value = existingInfoDict(pdfDoc)?.lookup(DOCUMENT_KEY)
+  const id = value?.decodeText?.() || ''
+  return /^[a-f0-9]{64}$/.test(id) ? id : ''
+}
 
 function round2(n) {
   return Math.round(n * 100) / 100
@@ -355,7 +362,7 @@ function addStampAnnotation(pdfDoc, page, ping, image) {
   page.node.addAnnot(context.register(annotation))
 }
 
-export async function buildSavedPdf(cleanBytes, pings, pngByType) {
+export async function buildSavedPdf(cleanBytes, pings, pngByType, { documentId = '' } = {}) {
   const pdfDoc = await PDFDocument.load(cleanBytes.slice(), { updateMetadata: false })
   stripPluginArtifacts(pdfDoc)
   const pages = pdfDoc.getPages()
@@ -385,5 +392,6 @@ export async function buildSavedPdf(cleanBytes, pings, pngByType) {
   }
 
   writePingPayload(pdfDoc, safePings)
+  if (/^[a-f0-9]{64}$/.test(documentId)) infoDict(pdfDoc).set(DOCUMENT_KEY, PDFHexString.fromText(documentId))
   return pdfDoc.save()
 }
