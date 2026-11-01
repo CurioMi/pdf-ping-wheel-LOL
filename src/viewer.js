@@ -19,13 +19,15 @@ import {
   noteSvg,
   wrapNoteText,
 } from './pings.js'
-import { buildSavedPdf, readPingPayload, stripPluginArtifacts, readDocumentId } from './pdf-io.js'
+import { buildSavedPdf, readPingPayload, stripPluginArtifacts, readDocumentId, readNotebook } from './pdf-io.js'
 import { hasSound, iconMarkup, wheelIconMarkup, originalPng, ensureOriginalPng, initializePingAssets, soundUrl } from './ping-assets.js'
 import { PDFDocument } from 'pdf-lib'
 import { createProfileStore, wheelSpecs, createReadingClock, recordReading, recordSavedMarks, recordQuestionReviews, qualifyingNote, dayKey, PROFILE_KEY, STARTER_IDS } from './progression.js'
 import { mountLoot } from './loot-ui.js'
 import { DocumentDrafts, flushDrafts } from './reader-drafts.js'
 import { mountQuestionPanel } from './question-panel.js'
+import { mountNotebookPanel } from './notebook-panel.js'
+import { setNotebookPart } from './notebook.js'
 import { LAMP_MS, readingTrail } from './reading-trail.js'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdf.worker.min.mjs', document.baseURI).href
@@ -58,6 +60,7 @@ const state = {
   authoredIds: new Set(),
   reviewIds: new Set(),
   drafts: null,
+  notebook: null,
   loading: false,
 }
 
@@ -65,6 +68,7 @@ const pngCache = new Map()
 const readingClock = createReadingClock()
 let loot
 let questionPanel
+let notebookPanel
 let sizePreset = 'small'
 try {
   const saved = localStorage.getItem('pdf-ping-wheel:marker-size')
@@ -189,6 +193,31 @@ function resumePage() {
     const rect = view.wrap.getBoundingClientRect()
     stage.scrollTop += rect.top - stage.getBoundingClientRect().top + rect.height * clamp(saved.offset, 0, 1)
   } catch { /* Start at the first page if a bookmark is unavailable. */ }
+}
+
+// Anchor the note at the middle of the visible reading area, even after zoom or sidebar resizing.
+function currentReadingPosition() {
+  const stage = $('stage').getBoundingClientRect()
+  const center = stage.top + stage.height / 2
+  let nearest = null, distance = Infinity
+  for (const view of state.views) {
+    const rect = view.wrap.getBoundingClientRect()
+    if (!rect.height) continue
+    const gap = Math.max(rect.top - center, center - rect.bottom, 0)
+    if (gap < distance) {
+      nearest = { page: view.index, offset: clamp((center - rect.top) / rect.height, 0, 1) }
+      distance = gap
+    }
+    if (gap === 0) break
+  }
+  return nearest
+}
+
+function locateReadingPosition({ page, offset }) {
+  const view = state.views[page]
+  if (!view) return
+  const stage = $('stage'), rect = view.wrap.getBoundingClientRect()
+  stage.scrollTop += rect.top + rect.height * offset - stage.getBoundingClientRect().top - stage.clientHeight / 2
 }
 
 function rememberEdit(mark) {
@@ -933,6 +962,8 @@ async function loadFile(file, handle = null) {
   rememberPage()
   pauseReading()
   state.loading = true
+  $('notebook-panel').inert = true
+  $('notebook-toggle').disabled = true
   try {
     keepComposerDraft()
     if (state.drafts?.tokens.size) {
@@ -946,6 +977,7 @@ async function loadFile(file, handle = null) {
     const raw = new Uint8Array(await file.arrayBuffer())
     const doc = await PDFDocument.load(raw.slice(), { updateMetadata: false })
     const documentId = readDocumentId(doc) || await hashBytes(raw)
+    const notebook = readNotebook(doc)
     const payload = readPingPayload(doc)
     let clean = raw, marks = []
     let warning = payload.warning || ''
@@ -955,12 +987,13 @@ async function loadFile(file, handle = null) {
       clean = new Uint8Array(await doc.save({ updateMetadata: false }))
       marks = payload.pings
     }
-    const drafts = new DocumentDrafts(documentId, marks, showDraftStatus)
+    const drafts = new DocumentDrafts(documentId, marks, showDraftStatus, notebook)
     let recovered
     try { recovered = await drafts.restore(marks, doc.getPageCount()) }
     catch { drafts.fail() }
     dismissAlt()
     closeChatComposer()
+    notebookPanel.close()
     questionPanel.reset()
     state.documentGeneration++
     readingClock.endQuiet()
@@ -969,6 +1002,7 @@ async function loadFile(file, handle = null) {
     state.cleanBytes = clean.slice()
     pngCache.clear()
     state.drafts = drafts
+    state.notebook = recovered?.notebook ?? structuredClone(notebook)
     state.pings = recovered?.marks ?? marks
     state.authoredIds = recovered?.authored ?? new Set()
     state.reviewIds = recovered?.reviews ?? new Set()
@@ -980,12 +1014,14 @@ async function loadFile(file, handle = null) {
     resumePage()
     readingClock.activity(performance.now())
     const details = [state.pings.length ? `${state.pings.length} 个标注` : '', drafts.tokens.size ? '本地草稿已恢复' : '',
-      recovered?.skipped ? '文件中有已变更的标注，相关旧草稿已保留在本机' : '', warning].filter(Boolean)
+      recovered?.skipped ? '文件内容已变更，相关旧草稿已保留在本机' : '', warning].filter(Boolean)
     setStatus(`已打开 ${state.fileName}${details.length ? ' · ' + details.join(' · ') : ''}`)
   } catch (error) {
     setStatus(`这份 PDF 打不开：${error?.message || error}`)
   } finally {
     state.loading = false
+    $('notebook-panel').inert = false
+    $('notebook-toggle').disabled = !state.pdf || !state.documentId
     showDraftStatus()
     resumeReading()
   }
@@ -1062,8 +1098,8 @@ async function pngMap(pings) {
   return out
 }
 
-function downloadBytes(bytes, filename) {
-  const blob = new Blob([bytes], { type: 'application/pdf' })
+function downloadBytes(bytes, filename, type = 'application/pdf') {
+  const blob = new Blob([bytes], { type })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -1080,6 +1116,7 @@ async function savePdf() {
   const snapshot = state.pings.map(p => ({ ...p }))
   const authored = new Set(state.authoredIds), documentId = state.documentId, generation = state.documentGeneration
   const reviewed = new Set(state.reviewIds)
+  const notebook = structuredClone(state.notebook)
   const capturedItems = [...state.drafts.tokens.keys()]
   const cleanBytes = state.cleanBytes, fileHandle = state.fileHandle, fileName = state.fileName
   try {
@@ -1088,7 +1125,7 @@ async function savePdf() {
       const bytes = await ensureOriginalPng(ping.type)
       if (spec && spec.category !== 'ping' && !ping.assetData && bytes) ping.assetData = bytesToBase64(bytes)
     }
-    const bytes = new Uint8Array(await buildSavedPdf(cleanBytes, snapshot, await pngMap(snapshot), { documentId }))
+    const bytes = new Uint8Array(await buildSavedPdf(cleanBytes, snapshot, await pngMap(snapshot), { documentId, notebook }))
     const name = /\.pdf$/i.test(fileName) ? fileName : `${fileName}.pdf`
     let wroteOriginal = false
     if (fileHandle?.createWritable) {
@@ -1108,6 +1145,7 @@ async function savePdf() {
     }
     await rewardSaved(snapshot, authored, reviewed, documentId, generation)
     state.drafts.rebase(snapshot, state.pings, state.authoredIds, state.reviewIds, capturedItems)
+    state.drafts.rebaseNotebook(notebook, state.notebook, capturedItems)
     await flushDrafts()
   } catch (error) {
     setStatus(`保存失败：${error?.message || error}`)
@@ -1140,7 +1178,7 @@ async function zoomBy(factor) {
 }
 
 function onKeyDown(event) {
-  if (loot?.isOpen() || state.loading || event.isComposing || event.target?.closest?.('#question-panel')) return
+  if (loot?.isOpen() || state.loading || event.isComposing || event.target?.closest?.('#question-panel, #notebook-panel')) return
   if (event.key === 'Escape' && state.chatOpen) {
     event.preventDefault()
     event.stopPropagation()
@@ -1221,7 +1259,7 @@ function onKeyDown(event) {
 }
 
 function onKeyUp(event) {
-  if (loot?.isOpen()) return
+  if (loot?.isOpen() || event.isComposing || event.target?.closest?.('#question-panel, #notebook-panel')) return
   if (isAltKey(event)) {
     event.preventDefault()
     event.stopPropagation()
@@ -1252,7 +1290,25 @@ function onPointerMove(event) {
 }
 
 function wire() {
+  notebookPanel = mountNotebookPanel({
+    getBook: () => state.notebook,
+    getName: () => state.fileName,
+    pageCount: () => state.views.length,
+    position: currentReadingPosition,
+    locate: locateReadingPosition,
+    edit(key, value) {
+      setNotebookPart(state.notebook, key, value)
+      state.drafts.notebook(key, value)
+    },
+    download: downloadBytes,
+    onOpen() {
+      dismissAlt()
+      closeChatComposer()
+      if (!$('question-panel').hidden) questionPanel.reset()
+    },
+  })
   questionPanel = mountQuestionPanel({
+    onOpen: () => notebookPanel.close(),
     questions: () => state.pings.filter(mark => mark.type === 'question'),
     select(id) { state.selectedId = id; paintSelection() },
     locate(id) { document.querySelector(`.stamp[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'center', inline: 'nearest' }) },
@@ -1379,7 +1435,7 @@ function wire() {
     loadFile(file)
   })
   document.addEventListener('pointerdown', (event) => {
-    if (loot?.isOpen() || state.loading || event.target.closest('#question-panel, #chat-composer')) return
+    if (loot?.isOpen() || state.loading || event.target.closest('#question-panel, #notebook-panel, #chat-composer')) return
     const clickedPage = event.button === 0 ? pageAt(event.clientX, event.clientY) : null
     if (state.alt?.mode === 'ping' && clickedPage) {
       const [rawX, rawY] = clientToPdf(clickedPage, event.clientX, event.clientY)

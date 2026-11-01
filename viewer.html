@@ -46,6 +46,7 @@
         <button type="button" data-marker-size="medium" aria-pressed="false">中</button>
         <button type="button" data-marker-size="large" aria-pressed="false">大</button>
       </div>
+      <button id="notebook-toggle" type="button" aria-controls="notebook-panel" aria-expanded="false" disabled>论文笔记</button>
       <button id="question-toggle" type="button" aria-controls="question-panel" aria-expanded="false" disabled>文献疑问 (0)</button></div>
     <div class="reader-workspace"><main id="stage">
       <section id="empty" class="empty">
@@ -66,6 +67,25 @@
         <label for="question-answer">我的理解</label><textarea id="question-answer" rows="4" maxlength="1000" placeholder="回看原文后，在这里补上你的解释。"></textarea>
         <button id="question-resolve" type="button">标为已解决</button>
         <p class="question-hint">收起后仍保留文字。点击工具栏「保存」将疑问写入 PDF。</p>
+      </div>
+    </aside>
+    <aside id="notebook-panel" hidden aria-labelledby="notebook-title">
+      <header class="question-head"><h2 id="notebook-title">论文笔记</h2><button id="notebook-close" type="button" aria-label="收起论文笔记">收起</button></header>
+      <p id="notebook-hint" class="notebook-hint">输入后自动留作本机草稿。点工具栏「保存」，笔记就会随 PDF 带走。</p>
+      <div id="notebook-fields">
+        <label class="notebook-heading" for="notebook-summary">整篇心得</label>
+        <textarea id="notebook-summary" rows="5" placeholder="读完后，你想记住什么？"></textarea>
+        <section class="notebook-pages" aria-labelledby="notebook-pages-title">
+          <div class="notebook-row"><h3 id="notebook-pages-title" class="notebook-heading">页边笔记</h3><button id="notebook-add" type="button">＋ 记当前页</button></div>
+          <p id="notebook-empty" class="notebook-hint">读到想记的地方，点「记当前页」。</p>
+          <ul id="notebook-entries" aria-label="按页码排列的笔记"></ul>
+          <div id="notebook-editor" hidden>
+            <div class="notebook-row"><label id="notebook-entry-label" for="notebook-entry"></label><button id="notebook-locate" type="button">回到原页 ↗</button></div>
+            <textarea id="notebook-entry" rows="4" placeholder="写下你对这一页的想法…"></textarea>
+            <div class="notebook-row"><button id="notebook-delete" type="button">删除这条</button><button id="notebook-done" type="button">收起这条</button></div>
+          </div>
+        </section>
+        <button id="notebook-export" type="button" disabled>导出笔记 .txt</button>
       </div>
     </aside></div>
     <div id="wheel" hidden></div>

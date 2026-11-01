@@ -1,6 +1,6 @@
 import { questionText } from './pings.js'
 
-export function mountQuestionPanel({ questions, select, locate, edit }) {
+export function mountQuestionPanel({ questions, select, locate, edit, onOpen }) {
   const byId = id => document.getElementById(id)
   const panel = byId('question-panel')
   const picker = byId('question-picker')
@@ -39,6 +39,7 @@ export function mountQuestionPanel({ questions, select, locate, edit }) {
   }
 
   function open(id, jump = false) {
+    onOpen?.()
     activeId = id
     editingField = null
     panel.hidden = false

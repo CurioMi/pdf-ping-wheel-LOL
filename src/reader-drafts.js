@@ -1,4 +1,6 @@
-// Keep only unsaved annotation changes and in-progress text. PDF bytes are never cached here.
+import { notebookPart, setNotebookPart, validEntry } from './notebook.js'
+
+// Keep unsaved changes by document and item. PDF bytes are never cached here.
 let database
 let pending = Promise.resolve()
 
@@ -61,9 +63,10 @@ export function stampSignature(stamp) {
 }
 
 export class DocumentDrafts {
-  constructor(documentId, marks, onChange) {
+  constructor(documentId, marks, onChange, notebook = null) {
     this.documentId = documentId
     this.base = new Map(marks.map(mark => [mark.id, stampSignature(mark)]))
+    this.bookBase = notebook
     this.tokens = new Map()
     this.composers = new Map()
     this.onChange = onChange
@@ -72,13 +75,23 @@ export class DocumentDrafts {
 
   async restore(marks, pageCount) {
     const results = new Map(marks.map(mark => [mark.id, mark]))
+    const notebook = structuredClone(this.bookBase)
     const authored = new Set(), reviews = new Set()
     let skipped = 0
     const records = await readDrafts(this.documentId)
     for (const record of records) {
       if (record.item.startsWith('chat:')) {
         this.composers.set(record.item, record.value)
-      } else {
+      } else if (record.item.startsWith('book:')) {
+        const key = record.item.slice(5)
+        const valid = key === 'summary' ? typeof record.value === 'string'
+          : record.value === null || (validEntry(record.value) && record.value.id === key)
+        if (!notebook || !valid || record.base !== JSON.stringify(notebookPart(this.bookBase, key))) {
+          skipped++
+          continue
+        }
+        setNotebookPart(notebook, key, record.value)
+      } else if (record.item.startsWith('mark:')) {
         const id = record.item.slice(5)
         // Another PDF editor may have changed a mark or removed a page since the draft was written.
         if (record.base !== (this.base.get(id) ?? null) || (record.value && record.value.page >= pageCount)) {
@@ -89,10 +102,10 @@ export class DocumentDrafts {
         else results.delete(id)
         if (record.authored) authored.add(id)
         if (record.reviewed) reviews.add(id)
-      }
+      } else continue
       this.tokens.set(record.item, record.token)
     }
-    return { marks: [...results.values()], authored, reviews, skipped }
+    return { marks: [...results.values()], authored, reviews, skipped, notebook }
   }
 
   write(item, fields) {
@@ -123,6 +136,23 @@ export class DocumentDrafts {
     if (!value) { this.composers.delete(item); this.drop(item); return }
     this.composers.set(item, value)
     this.write(item, { value })
+  }
+
+  notebook(key, value) {
+    const base = JSON.stringify(notebookPart(this.bookBase, key))
+    if (JSON.stringify(value) === base) this.drop(`book:${key}`)
+    else this.write(`book:${key}`, { value, base })
+  }
+
+  rebaseNotebook(snapshot, current, capturedItems) {
+    if (!snapshot) return
+    this.bookBase = snapshot
+    for (const item of new Set([...capturedItems, ...this.tokens.keys()])) {
+      if (item.startsWith('book:')) {
+        const key = item.slice(5)
+        this.notebook(key, notebookPart(current, key))
+      }
+    }
   }
 
   rebase(snapshot, current, authored, reviews, capturedItems) {

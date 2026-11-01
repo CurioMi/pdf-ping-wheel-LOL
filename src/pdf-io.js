@@ -8,6 +8,7 @@ import {
   decodePDFRawStream,
 } from 'pdf-lib'
 import { PINGS, STAMP_TYPES, NOTE, NOTE_MAX_CHARS, PING_SIZE, stampSize, pingById, questionText } from './pings.js'
+import { blankNotebook, validNotebook } from './notebook.js'
 
 // PDFPingWheel v2 uses native Stamp annotations. Version 1 files used tagged page-content streams and an Info-dictionary JSON payload;
 // Info index v3 stores portable emote PNG data; v4 also persists note text, while native annotations remain authoritative.
@@ -20,6 +21,17 @@ const TYPE_KEY = PDFName.of('type')
 const X_KEY = PDFName.of('x')
 const Y_KEY = PDFName.of('y')
 const DOCUMENT_KEY = PDFName.of('PDFPingWheelDocument')
+const NOTEBOOK_KEY = PDFName.of('PDFPingWheelNotebook')
+
+// null leaves an unfamiliar or damaged notebook intact when other parts of the PDF are saved.
+export function readNotebook(pdfDoc) {
+  const info = existingInfoDict(pdfDoc)
+  if (!info?.has(NOTEBOOK_KEY)) return blankNotebook()
+  try {
+    const book = JSON.parse(info.lookup(NOTEBOOK_KEY).decodeText())
+    return validNotebook(book) ? book : null
+  } catch { return null }
+}
 
 export function readDocumentId(pdfDoc) {
   const value = existingInfoDict(pdfDoc)?.lookup(DOCUMENT_KEY)
@@ -384,7 +396,7 @@ function addStampAnnotation(pdfDoc, page, ping, image) {
   page.node.addAnnot(context.register(annotation))
 }
 
-export async function buildSavedPdf(cleanBytes, pings, pngByType, { documentId = '' } = {}) {
+export async function buildSavedPdf(cleanBytes, pings, pngByType, { documentId = '', notebook } = {}) {
   const pdfDoc = await PDFDocument.load(cleanBytes.slice(), { updateMetadata: false })
   stripPluginArtifacts(pdfDoc)
   const pages = pdfDoc.getPages()
@@ -414,6 +426,11 @@ export async function buildSavedPdf(cleanBytes, pings, pngByType, { documentId =
   }
 
   writePingPayload(pdfDoc, safePings)
+  if (notebook != null) {
+    if (!validNotebook(notebook)) throw new Error('论文笔记格式有误')
+    if (notebook.summary || notebook.entries.length) infoDict(pdfDoc).set(NOTEBOOK_KEY, PDFHexString.fromText(JSON.stringify(notebook)))
+    else infoDict(pdfDoc).delete(NOTEBOOK_KEY)
+  }
   if (/^[a-f0-9]{64}$/.test(documentId)) infoDict(pdfDoc).set(DOCUMENT_KEY, PDFHexString.fromText(documentId))
   return pdfDoc.save()
 }
