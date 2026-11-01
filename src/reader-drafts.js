@@ -63,8 +63,10 @@ export function stampSignature(stamp) {
 }
 
 export class DocumentDrafts {
-  constructor(documentId, marks, onChange, notebook = null) {
+  constructor(documentId, marks, onChange, notebook = null, sourceHash = documentId) {
     this.documentId = documentId
+    this.sourceHash = sourceHash
+    this.exportedItems = new Set()
     this.base = new Map(marks.map(mark => [mark.id, stampSignature(mark)]))
     this.bookBase = notebook
     this.tokens = new Map()
@@ -79,6 +81,31 @@ export class DocumentDrafts {
     const authored = new Set(), reviews = new Set()
     let skipped = 0
     const records = await readDrafts(this.documentId)
+    // A browser download can be cancelled. Reconstruct the exported edits only on the exact input file.
+    const prefix = `copy:${this.sourceHash}:`
+    for (const record of records) {
+      if (!record.item.startsWith('copy:')) continue
+      if (record.outputHash === this.sourceHash) {
+        removeDraft(this.documentId, record.item, record.token).catch(() => this.fail())
+        continue
+      }
+      if (!record.item.startsWith(prefix)) continue
+      const item = record.item.slice(prefix.length), key = item.slice(5)
+      if (item.startsWith('mark:')) {
+        if (record.value === null) results.delete(key)
+        else if (record.value?.id === key && record.value.page >= 0 && record.value.page < pageCount) results.set(key, record.value)
+        else continue
+      } else if (item.startsWith('book:') && notebook) {
+        if (key === 'summary' ? typeof record.value !== 'string' :
+          record.value !== null && (!validEntry(record.value) || record.value.id !== key)) continue
+        setNotebookPart(notebook, key, record.value)
+      } else continue
+      this.exportedItems.add(item)
+    }
+    if (this.exportedItems.size) {
+      this.base = new Map([...results.values()].map(mark => [mark.id, stampSignature(mark)]))
+      this.bookBase = structuredClone(notebook)
+    }
     for (const record of records) {
       if (record.item.startsWith('chat:')) {
         this.composers.set(record.item, record.value)
@@ -105,7 +132,20 @@ export class DocumentDrafts {
       } else continue
       this.tokens.set(record.item, record.token)
     }
-    return { marks: [...results.values()], authored, reviews, skipped, notebook }
+    return { marks: [...results.values()], authored, reviews, skipped, notebook, fromCopy: this.exportedItems.size > 0 }
+  }
+
+  async keepDownload(snapshot, book, capturedItems, outputHash) {
+    const items = new Set([...this.exportedItems, ...capturedItems].filter(item => item.startsWith('mark:') || (book && item.startsWith('book:'))))
+    if (!items.size) return
+    const marks = new Map(snapshot.map(mark => [mark.id, mark]))
+    await enqueue(store => {
+      for (const item of items) {
+        const key = item.slice(5), value = item.startsWith('book:') ? notebookPart(book, key) : marks.get(key) ?? null
+        store.put({ documentId: this.documentId, item: `copy:${this.sourceHash}:${item}`, value, outputHash, token: crypto.randomUUID() })
+      }
+    })
+    this.exportedItems = items
   }
 
   write(item, fields) {

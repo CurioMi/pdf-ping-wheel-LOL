@@ -12,6 +12,7 @@ import { exerciseQuestions } from './verify-question-ui.mjs'
 import { exerciseTrail } from './verify-trail-ui.mjs'
 import { exerciseNotebook } from './verify-notebook-ui.mjs'
 import { exerciseCompanions } from './verify-companion-ui.mjs'
+import { exerciseSaveProtection } from './verify-saving-ui.mjs'
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -162,6 +163,7 @@ try {
   await exerciseNotebook(browser, url, out)
   await exerciseReaderTools(browser, url, out)
   await exerciseCompanions(browser, url, out)
+  await exerciseSaveProtection(browser, url, out)
   console.log('PASS UI: search, unlock, equip, swap, drag, persistence, chests, free mode, PDF emote/note portability, task deduplication, modal pause, focus, responsive layout and offline network.')
 } finally {
   await browser.close()

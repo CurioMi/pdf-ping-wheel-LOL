@@ -1015,7 +1015,8 @@ async function loadFile(file, handle = null) {
     setStatus('正在打开…')
     const raw = new Uint8Array(await file.arrayBuffer())
     const doc = await PDFDocument.load(raw.slice(), { updateMetadata: false })
-    const documentId = readDocumentId(doc) || await hashBytes(raw)
+    const sourceHash = await hashBytes(raw)
+    const documentId = readDocumentId(doc) || sourceHash
     const notebook = readNotebook(doc)
     const payload = readPingPayload(doc)
     let clean = raw, marks = []
@@ -1026,7 +1027,7 @@ async function loadFile(file, handle = null) {
       clean = new Uint8Array(await doc.save({ updateMetadata: false }))
       marks = payload.pings
     }
-    const drafts = new DocumentDrafts(documentId, marks, showDraftStatus, notebook)
+    const drafts = new DocumentDrafts(documentId, marks, showDraftStatus, notebook, sourceHash)
     let recovered
     try { recovered = await drafts.restore(marks, doc.getPageCount()) }
     catch { drafts.fail() }
@@ -1053,9 +1054,9 @@ async function loadFile(file, handle = null) {
     enableTools(true)
     resumePage()
     readingClock.activity(performance.now())
-    const details = [state.pings.length ? `${state.pings.length} 个标注` : '', drafts.tokens.size ? '本地草稿已恢复' : '',
+    const details = [state.pings.length ? `${state.pings.length} 个标注` : '', recovered?.fromCopy ? '已恢复上次导出副本的改动' : '', drafts.tokens.size ? '本地草稿已恢复' : '',
       recovered?.skipped ? '文件内容已变更，相关旧草稿已保留在本机' : '', warning].filter(Boolean)
-    setStatus(`已打开 ${state.fileName}${details.length ? ' · ' + details.join(' · ') : ''}`, !warning && !drafts.tokens.size && !recovered?.skipped)
+    setStatus(`已打开 ${state.fileName}${details.length ? ' · ' + details.join(' · ') : ''}`, !warning && !drafts.tokens.size && !recovered?.skipped && !recovered?.fromCopy)
   } catch (error) {
     setStatus(`这份 PDF 打不开：${error?.message || error}`)
   } finally {
@@ -1157,6 +1158,26 @@ function downloadBytes(bytes, filename, type = 'application/pdf') {
   setTimeout(() => URL.revokeObjectURL(url), 2500)
 }
 
+async function writeOriginal(handle, bytes, sourceHash, documentId) {
+  const write = async () => {
+    const stream = await handle.createWritable()
+    try {
+      await stream.write(bytes)
+      // The writer stages changes until close. Check the live file before replacing it.
+      if (await hashBytes(await (await handle.getFile()).arrayBuffer()) !== sourceHash) {
+        await stream.abort()
+        return false
+      }
+      await stream.close()
+      return true
+    } catch (error) {
+      try { await stream.abort() } catch { /* The stream may already be closed. */ }
+      throw error
+    }
+  }
+  return navigator.locks ? navigator.locks.request('pdf-ping-wheel:save:' + documentId, write) : write()
+}
+
 async function savePdf() {
   if (!state.cleanBytes || !state.documentId || state.loading || state.saving) return
   state.saving = true
@@ -1175,22 +1196,29 @@ async function savePdf() {
       if (spec && spec.category !== 'ping' && !ping.assetData && bytes) ping.assetData = bytesToBase64(bytes)
     }
     const bytes = new Uint8Array(await buildSavedPdf(cleanBytes, snapshot, await pngMap(snapshot), { documentId, notebook }))
+    const outputHash = await hashBytes(bytes)
     const name = /\.pdf$/i.test(fileName) ? fileName : `${fileName}.pdf`
-    let wroteOriginal = false
+    let wroteOriginal = false, reason = ''
     if (fileHandle?.createWritable) {
       try {
-        const writable = await fileHandle.createWritable()
-        await writable.write(bytes)
-        await writable.close()
-        wroteOriginal = true
-        setStatus('已覆盖保存原文件')
-      } catch (error) {
-        console.warn(error)
-      }
+        wroteOriginal = await writeOriginal(fileHandle, bytes, state.drafts.sourceHash, documentId)
+        if (!wroteOriginal) reason = '原文件已被修改'
+      } catch { reason = '原文件无法写入' }
     }
-    if (!wroteOriginal) {
-      downloadBytes(bytes, name)
-      setStatus(`已下载 ${name}`)
+    if (wroteOriginal) {
+      state.drafts.sourceHash = outputHash
+      state.drafts.exportedItems.clear()
+      setStatus('已覆盖保存原文件')
+    } else {
+      const copyName = reason ? name.replace(/\.pdf$/i, '-阅读副本.pdf') : name
+      downloadBytes(bytes, copyName)
+      setStatus(reason ? `${reason}，原件已保留。已请求下载 ${copyName}` : '已请求下载副本')
+      try { await state.drafts.keepDownload(snapshot, notebook, capturedItems, outputHash) }
+      catch {
+        state.drafts.fail()
+        setStatus('已请求下载副本，本机恢复记录写入失败。请确认副本后再关闭。')
+        return
+      }
     }
     await rewardSaved(snapshot, authored, reviewed, documentId, generation)
     state.drafts.rebase(snapshot, state.pings, state.authoredIds, state.reviewIds, capturedItems)
