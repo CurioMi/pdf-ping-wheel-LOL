@@ -35,7 +35,7 @@ export function mountQuestionPanel({ questions, select, locate, edit, onOpen }) 
     editingField = null
     toggle.setAttribute('aria-expanded', 'false')
     select(null)
-    if (focus) toggle.focus({ preventScroll: true })
+    if (focus) byId('tools-toggle').focus({ preventScroll: true })
   }
 
   function open(id, jump = false) {
@@ -49,7 +49,10 @@ export function mountQuestionPanel({ questions, select, locate, edit, onOpen }) 
     if (jump) locate(activeId)
   }
 
-  toggle.addEventListener('click', () => panel.hidden ? open(activeId, true) : close(true))
+  toggle.addEventListener('click', () => {
+    if (panel.hidden) { open(activeId, true); byId('question-close').focus({ preventScroll: true }) }
+    else close(true)
+  })
   byId('question-close').addEventListener('click', () => close(true))
   picker.addEventListener('change', () => open(picker.value, true))
   byId('question-locate').addEventListener('click', () => locate(activeId))

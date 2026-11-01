@@ -1,3 +1,4 @@
+import { clickReaderTool } from './reader-tools-ui.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { PROFILE_KEY, newProfile } from '../src/progression.js'
@@ -38,7 +39,7 @@ export async function exerciseTrail(browser, url, out) {
     assert(idle > old.totalMs + 100000 && idle <= old.totalMs + 121000, 'ordinary reading must stop at the idle threshold')
     await advance(20000); assert.equal((await profile()).totalMs, idle)
 
-    await click('#quiet-reading')
+    await clickReaderTool(page, '#quiet-reading', { force: true })
     await advance(135000)
     const during = await profile()
     assert(during.totalMs - idle > 130000, 'quiet reading must continue beyond two minutes without input')
@@ -78,9 +79,9 @@ export async function exerciseTrail(browser, url, out) {
     assert.equal(finished.xp, 50)
 
     // Cancelling or replacing the document ends a quiet session without erasing its earned distance.
-    await click('#quiet-reading'); await advance(15000); await click('#quiet-reading')
+    await clickReaderTool(page, '#quiet-reading', { force: true }); await advance(15000); await clickReaderTool(page, '#quiet-reading', { force: true })
     assert.equal(await page.locator('#quiet-reading').getAttribute('aria-pressed'), 'false')
-    await click('#quiet-reading'); const beforeSwitch = (await profile()).totalMs
+    await clickReaderTool(page, '#quiet-reading', { force: true }); const beforeSwitch = (await profile()).totalMs
     await page.clock.resume()
     await page.setInputFiles('#file', join(out, 'question-with-notes.pdf'))
     await page.waitForFunction(() => document.getElementById('status').textContent.includes('已打开 question-with-notes.pdf'), null, { polling: 50 })

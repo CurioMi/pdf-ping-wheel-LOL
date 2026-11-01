@@ -8,52 +8,56 @@
     <link rel="stylesheet" href="./assets/viewer.css" />
   </head>
   <body>
-    <header class="bar">
-      <div class="brand">
+    <header class="bar" aria-label="阅读操作">
+      <div class="reader-identity">
         <img src="./icons/icon32.png" alt="" width="22" height="22" />
-        <span>PDF Ping Wheel</span>
+        <div class="file-info">
+          <span id="file-name" class="file">PDF Ping Wheel</span>
+          <div class="file-feedback"><span id="draft-state" aria-live="polite"></span><span id="status" class="sr-only" role="status"></span></div>
+        </div>
       </div>
-      <button id="open" type="button">打开</button>
-      <button id="save" type="button" disabled>保存</button>
-      <button id="mastery" type="button" disabled title="亮牌快捷键 Ctrl+6（若浏览器拦截，可点击此按钮）">亮牌 Ctrl+6</button>
-      <button id="chat-toggle" type="button" disabled title="按 Enter 输入并放置 PDF 备注">备注 Enter</button>
-      <button id="loot-open" type="button" title="查看战利品、配置表情轮盘和阅读任务">◇ 战利品</button>
-      <span id="file-name" class="file">未打开文件</span>
-      <span id="asset-status" class="asset-status" title="素材从本地安装包读取">素材检测中…</span>
-      <div class="spacer"></div>
-      <div class="zoom">
-        <button id="zoom-out" type="button" disabled aria-label="缩小">−</button>
-        <span id="zoom-label">100%</span>
-        <button id="zoom-in" type="button" disabled aria-label="放大">+</button>
-        <button id="fit" type="button" disabled>适应宽度</button>
+      <div class="file-actions with-paper">
+        <button id="open" type="button" title="打开另一篇 PDF">打开</button>
+        <button id="save" type="button" disabled title="保存当前 PDF 和笔记">保存</button>
       </div>
-    </header>
-    <details id="help" class="help"><summary>阅读快捷键</summary>
-      <p>按住 Alt 移动鼠标选择信号。G 放置普通信号，V 放置危险标记，H 标记视野。点击问号可展开疑问备注。按住 T 选择表情，轻点 T 放置中心表情，Ctrl+6 亮牌。</p>
-      <p>Enter 打开或发送备注，Shift+Enter 换行，Esc 收起。双击备注可编辑，拖动标记可移动，Delete 删除，Ctrl+Z 撤销。</p>
-    </details>
-    <p id="status" class="status" aria-live="polite"></p>
-    <div class="reading-hud">
+      <button id="notebook-toggle" class="with-paper" type="button" aria-controls="notebook-panel" aria-expanded="false" disabled>论文笔记</button>
       <button id="reading-quests" class="trail-chip" type="button" aria-label="查看峡谷巡灯地图与阅读任务">
         <svg viewBox="0 0 20 22" width="15" height="17" aria-hidden="true"><path d="m10 1 7 5-2 11-5 3-5-3L3 6Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 7l3 5-3 4-3-4Z" fill="currentColor"/></svg>
         <span id="reading-progress">峡谷巡灯</span><span class="trail-meter" aria-hidden="true"><i id="trail-fill"></i></span>
       </button>
-      <button id="quiet-reading" type="button" aria-pressed="false" disabled>静读 10 分钟</button>
-      <span id="draft-state" aria-live="polite"></span>
-      <div class="marker-sizes" role="group" aria-labelledby="marker-size-label" title="选中图标时会同时调整它的大小。新图标也使用所选尺寸。">
-        <span id="marker-size-label">新标记大小</span>
-        <button type="button" data-marker-size="small" aria-pressed="true">小</button>
-        <button type="button" data-marker-size="medium" aria-pressed="false">中</button>
-        <button type="button" data-marker-size="large" aria-pressed="false">大</button>
-      </div>
-      <button id="notebook-toggle" type="button" aria-controls="notebook-panel" aria-expanded="false" disabled>论文笔记</button>
-      <button id="question-toggle" type="button" aria-controls="question-panel" aria-expanded="false" disabled>文献疑问 (0)</button></div>
+      <button id="tools-toggle" type="button" popovertarget="reader-tools" aria-controls="reader-tools">工具 <span aria-hidden="true">⌄</span></button>
+      <section id="reader-tools" popover="auto" aria-label="阅读工具">
+        <h2>阅读工具</h2>
+        <div class="tool-row"><span class="tool-label">页面缩放</span><div class="zoom" role="group" aria-label="页面缩放">
+          <button id="zoom-out" type="button" disabled aria-label="缩小">−</button><span id="zoom-label">100%</span>
+          <button id="zoom-in" type="button" disabled aria-label="放大">+</button><button id="fit" type="button" disabled>适应宽度</button>
+        </div></div>
+        <div class="tool-row"><span id="marker-size-label" class="tool-label">新标记大小</span>
+          <div class="marker-sizes" role="group" aria-labelledby="marker-size-label" title="同时调整选中图标和新图标的大小">
+            <button type="button" data-marker-size="small" aria-pressed="true">小</button><button type="button" data-marker-size="medium" aria-pressed="false">中</button><button type="button" data-marker-size="large" aria-pressed="false">大</button>
+          </div>
+        </div>
+        <div class="tool-actions">
+          <button id="question-toggle" type="button" aria-controls="question-panel" aria-expanded="false" disabled>文献疑问 (0)</button>
+          <button id="chat-toggle" type="button" disabled title="在当前阅读位置写一条页面备注">页面备注 <kbd>Enter</kbd></button>
+          <button id="quiet-reading" type="button" aria-pressed="false" disabled>静读 10 分钟</button>
+          <button id="mastery" type="button" disabled title="在当前阅读位置亮牌">亮牌 <kbd>Ctrl+6</kbd></button>
+        </div>
+        <button id="loot-open" type="button" title="查看战利品、配置表情轮盘和阅读任务">战利品 <span>藏品与轮盘 ↗</span></button>
+        <details id="help"><summary>快捷键与信号图例</summary>
+          <p>按住 Alt 选信号。G 放置普通信号，V 放置危险标记，H 标记视野。点问号可写疑问。按住 T 选表情，轻点 T 放置中心表情，Ctrl+6 亮牌。</p>
+          <p>Enter 打开或发送页面备注，Shift+Enter 换行，Esc 收起。双击备注可编辑，拖动标记可移动，Delete 删除，Ctrl+Z 撤销。</p>
+          <div id="legend" class="legend"></div>
+          <p id="asset-status" class="asset-status" title="素材从本地安装包读取">素材检测中…</p>
+        </details>
+      </section>
+    </header>
     <div class="reader-workspace"><main id="stage">
       <section id="empty" class="empty">
-        <h1>打开一份 PDF</h1>
-        <p>把文件拖到这里，或点击「打开」。标记写在页面坐标上，缩放和滚动都不会跑位。</p>
-        <div id="legend" class="legend"></div>
-        <button id="open-empty" type="button">选择 PDF</button>
+        <svg class="empty-lamp" viewBox="0 0 32 36" width="32" height="36" aria-hidden="true"><path d="m16 2 11 7-3 17-8 6-8-6L5 9Z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m16 11 5 8-5 6-5-6Z" fill="currentColor"/></svg>
+        <h1>读一篇论文</h1>
+        <p>把 PDF 拖到这里。再打开同一篇，会回到上次读的位置。</p>
+        <button id="open-empty" type="button">打开 PDF</button>
       </section>
       <div id="pages" hidden></div>
     </main>

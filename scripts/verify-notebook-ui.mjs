@@ -1,3 +1,4 @@
+import { clickReaderTool } from './reader-tools-ui.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
@@ -49,7 +50,7 @@ export async function exerciseNotebook(browser, url, out) {
     assert.equal(await entries.count(), 3)
     page.once('dialog', dialog => dialog.accept()); await page.click('#notebook-delete')
     assert.equal(await entries.count(), 2)
-    await page.click('#question-toggle')
+    await clickReaderTool(page, '#question-toggle')
     assert(!(await page.locator('#notebook-panel').isVisible()))
     await page.click('#notebook-toggle')
     assert(!(await page.locator('#question-panel').isVisible()))
@@ -151,11 +152,11 @@ export async function exerciseNotebook(browser, url, out) {
       await reader.click('#notebook-toggle')
       assert.equal(await reader.inputValue('#notebook-summary'), '保存进行时继续写的文字')
       assert.equal(await reader.locator('#notebook-entries button').count(), 0)
-      await reader.click('#notebook-close'); await reader.click('#chat-toggle')
+      await reader.click('#notebook-close'); await clickReaderTool(reader, '#chat-toggle')
       await reader.fill('#chat-input', '尚未发送的聊天备注')
       await reader.click('#notebook-toggle')
       assert(!(await reader.locator('#chat-composer').isVisible()))
-      await reader.click('#notebook-close'); await reader.click('#chat-toggle')
+      await reader.click('#notebook-close'); await clickReaderTool(reader, '#chat-toggle')
       assert.equal(await reader.inputValue('#chat-input'), '尚未发送的聊天备注')
     } finally { await fresh.close() }
     assert.deepEqual(errors, []); assert.deepEqual(external, [])

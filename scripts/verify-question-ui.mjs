@@ -1,3 +1,4 @@
+import { clickReaderTool } from './reader-tools-ui.mjs'
 import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -60,17 +61,18 @@ export async function exerciseQuestions(browser, url, out) {
     assert(!await page.locator('#question-panel').isVisible())
     await page.keyboard.press('Control+z'); assert.equal(await question.getAttribute('data-x'), beforeDrag)
     await question.click(); assert.equal(await page.inputValue('#question-note'), note)
-    await page.click('[data-marker-size="large"]'); assert.equal(await points(), 36)
-    await page.click('[data-marker-size="medium"]'); assert.equal(await points(), 27)
-    await page.click('[data-marker-size="small"]'); assert.equal(await points(), 18)
+    await clickReaderTool(page, '[data-marker-size="large"]'); assert.equal(await points(), 36)
+    await clickReaderTool(page, '[data-marker-size="medium"]'); assert.equal(await points(), 27)
+    await clickReaderTool(page, '[data-marker-size="small"]'); assert.equal(await points(), 18)
     const originalWidth = await question.evaluate(el => parseFloat(el.style.width))
-    await page.click('#zoom-in')
+    await clickReaderTool(page, '#zoom-in')
     await page.waitForFunction(() => document.getElementById('zoom-label').textContent === '173%')
     const zoomedWidth = await question.evaluate(el => parseFloat(el.style.width))
     assert(Math.abs(zoomedWidth - originalWidth * 1.15) < 0.1)
     assert.equal(await page.inputValue('#question-answer'), answer)
-    await page.click('#zoom-out')
+    await clickReaderTool(page, '#zoom-out')
     await page.waitForFunction(() => document.getElementById('zoom-label').textContent === '150%')
+    await page.keyboard.press('Escape')
     await page.click('#question-locate')
     const stage = await page.locator('#stage').boundingBox(), panel = await page.locator('#question-panel').boundingBox()
     assert(stage.x + stage.width <= panel.x + 1, 'the open question must not cover the PDF')
@@ -79,8 +81,8 @@ export async function exerciseQuestions(browser, url, out) {
 
     // An unsent chat draft survives the loot window, a cancelled file switch and a reload of its own PDF.
     const originalDraft = '准备核对相同的量纲。'
-    await page.click('#chat-toggle'); await page.fill('#chat-input', originalDraft)
-    await page.click('#loot-open'); await page.click('#loot-close'); await page.locator('#chat-input').waitFor()
+    await clickReaderTool(page, '#chat-toggle'); await page.fill('#chat-input', originalDraft)
+    await clickReaderTool(page, '#loot-open'); await page.click('#loot-close'); await page.locator('#chat-input').waitFor()
     assert.equal(await page.inputValue('#chat-input'), originalDraft)
     await page.keyboard.press('Escape')
     const other = join(out, 'reading-fixture.pdf')
@@ -89,9 +91,9 @@ export async function exerciseQuestions(browser, url, out) {
     await load(input)
     await question.waitFor()
     assert(await page.locator('#stage').evaluate(el => el.scrollTop > 550), 'last reading page should be restored')
-    await page.click('#chat-toggle'); assert.equal(await page.inputValue('#chat-input'), originalDraft)
+    await clickReaderTool(page, '#chat-toggle'); assert.equal(await page.inputValue('#chat-input'), originalDraft)
     await page.click('#chat-cancel')
-    await page.click('#question-toggle'); assert.equal(await page.inputValue('#question-answer'), answer)
+    await clickReaderTool(page, '#question-toggle'); assert.equal(await page.inputValue('#question-answer'), answer)
     await page.click('#question-resolve'); await save()
     const payload = readPingPayload(await PDFDocument.load(await readFile(exported)))
     assert.equal(payload.pings.length, 1)

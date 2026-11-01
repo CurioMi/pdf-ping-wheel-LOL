@@ -42,6 +42,8 @@ const state = {
   fileName: '',
   fileHandle: null,
   scale: 1,
+  fitWidth: true,
+  pageWidth: 0,
   pings: [],
   selectedId: null,
   undo: [],
@@ -91,17 +93,19 @@ function updateReadingHud() {
   const foreground = readingForeground()
   const active = readingClock.active(performance.now(), foreground)
   const minutes = Math.floor(trail.progressMs / 60000)
-  const label = state.pdf ? `${trail.nextStop} · ${minutes}/10 分` : '峡谷巡灯 · 查看地图'
+  const remaining = readingClock.quietRemainingMs
+  const prefix = remaining ? (foreground ? '静读中 · ' : '静读暂停 · ') : ''
+  const label = state.documentId ? `${prefix}${trail.nextStop} · ${minutes}/10 分` : '巡灯地图'
   $('reading-progress').textContent = label
   $('trail-fill').style.width = `${trail.progressMs / LAMP_MS * 100}%`
   const chip = $('reading-quests')
   chip.classList.toggle('is-reading', active)
   const status = !state.documentId ? '打开 PDF 后自动开始' : active ? '阅读中' : '计时暂停'
-  chip.title = `${status}。今日阅读 ${Math.floor((profile.days[dayKey()]?.ms || 0) / 60000)} 分钟，累计点亮 ${trail.lights} 盏。点击查看地图与任务。`
+  const reward = $('loot-open').classList.contains('has-rewards') ? '新战利品已到账。' : ''
+  chip.title = `${status}。今日阅读 ${Math.floor((profile.days[dayKey()]?.ms || 0) / 60000)} 分钟，累计点亮 ${trail.lights} 盏。${reward}点击查看地图与任务。`
   chip.setAttribute('aria-label', `${label}。${chip.title}`)
 
   const quiet = $('quiet-reading')
-  const remaining = readingClock.quietRemainingMs
   quiet.disabled = !state.documentId || state.loading
   quiet.setAttribute('aria-pressed', String(remaining > 0))
   quiet.textContent = remaining ? `${foreground ? '静读中' : '静读暂停'} · ${Math.ceil(remaining / 60000)} 分` : '静读 10 分钟'
@@ -155,8 +159,10 @@ async function rewardSaved(snapshot, authored, reviewed, documentId, generation)
 
 const $ = (id) => document.getElementById(id)
 
-function setStatus(text) {
-  $('status').textContent = text
+function setStatus(text, quiet = false) {
+  const status = $('status')
+  status.classList.toggle('sr-only', quiet)
+  status.textContent = text
 }
 
 function setAssetStatus(text) {
@@ -165,7 +171,9 @@ function setAssetStatus(text) {
 
 function showDraftStatus() {
   const drafts = state.drafts
-  $('draft-state').textContent = drafts?.writeFailed ? '本地草稿存储异常，请保存 PDF' : drafts?.tokens.size ? '有本地草稿 · 待保存' : ''
+  const text = drafts?.writeFailed ? '本地草稿存储异常，请保存 PDF' : drafts?.tokens.size ? '有本地草稿 · 待保存' : ''
+  if ($('draft-state').textContent !== text) $('draft-state').textContent = text
+  $('save').classList.toggle('is-dirty', Boolean(text))
 }
 
 function rememberMark(id) {
@@ -218,6 +226,13 @@ function locateReadingPosition({ page, offset }) {
   if (!view) return
   const stage = $('stage'), rect = view.wrap.getBoundingClientRect()
   stage.scrollTop += rect.top + rect.height * offset - stage.getBoundingClientRect().top - stage.clientHeight / 2
+}
+
+function readingCenter() {
+  const anchor = currentReadingPosition()
+  if (!anchor) return null
+  const rect = state.views[anchor.page].wrap.getBoundingClientRect(), stage = $('stage').getBoundingClientRect()
+  return { x: clamp(stage.left + stage.width / 2, rect.left, rect.right), y: rect.top + rect.height * anchor.offset }
 }
 
 function rememberEdit(mark) {
@@ -414,9 +429,9 @@ function layoutStamps() {
       el.classList.add('note-stamp')
       el.textContent = ping.text
       el.title = '备注（双击编辑）'
-      el.style.fontSize = `${12 * state.scale}px`
-      el.style.lineHeight = `${18 * state.scale}px`
-      el.style.padding = `${12 * state.scale}px ${12 * state.scale}px`
+      el.style.fontSize = `${12 * view.viewport.scale}px`
+      el.style.lineHeight = `${18 * view.viewport.scale}px`
+      el.style.padding = `${12 * view.viewport.scale}px`
       el.addEventListener('dblclick', (event) => { event.preventDefault(); event.stopPropagation(); openChatComposer(ping.id) })
     } else if (typeof ping.assetData === 'string' && /^[A-Za-z0-9+/]+={0,2}$/.test(ping.assetData)) {
       const image = document.createElement('img')
@@ -555,7 +570,7 @@ function closeChatComposer(discard = false) {
   $('chat-composer').hidden = true
 }
 
-function openChatComposer(editNoteId = null) {
+function openChatComposer(editNoteId = null, point = state.pointer) {
   if (!state.pdf || state.loading) {
     setStatus('请先打开一份 PDF')
     return
@@ -564,9 +579,9 @@ function openChatComposer(editNoteId = null) {
   const existing = editNoteId ? state.pings.find((ping) => ping.id === editNoteId && ping.type === NOTE.id) : null
   const draft = state.drafts?.composers.get(`chat:${existing?.id || 'new'}`)
   state.chatOpen = true
-  const anchorView = !existing ? pageAt(state.pointer.x, state.pointer.y) : null
+  const anchorView = !existing && point ? pageAt(point.x, point.y) : null
   if (anchorView) {
-    const [anchorX, anchorY] = clientToPdf(anchorView, state.pointer.x, state.pointer.y)
+    const [anchorX, anchorY] = clientToPdf(anchorView, point.x, point.y)
     state.chatAnchor = { page: anchorView.index, x: round(anchorX), y: round(anchorY) }
   } else if (!existing) {
     state.chatAnchor = null
@@ -651,14 +666,14 @@ function submitChatNote() {
   closeChatComposer(true)
 }
 
-function placeAtPointer(type) {
+function placeAtPointer(type, point = state.pointer) {
   if (!state.pdf) return
-  const view = pageAt(state.pointer.x, state.pointer.y)
+  const view = point && pageAt(point.x, point.y)
   if (!view) {
     setStatus('请先将鼠标移到 PDF 页面，再使用快捷键')
     return
   }
-  const [rawX, rawY] = clientToPdf(view, state.pointer.x, state.pointer.y)
+  const [rawX, rawY] = clientToPdf(view, point.x, point.y)
   const [x, y] = clampPdf(view, rawX, rawY, type)
   addPing(type, view.index, round(x), round(y))
 }
@@ -872,7 +887,7 @@ function cancelRenders() {
   state.renderTasks = []
 }
 
-async function renderPages() {
+async function renderPages(anchor = null) {
   const token = ++state.renderToken
   cancelRenders()
   const holder = $('pages')
@@ -885,7 +900,9 @@ async function renderPages() {
     if (token !== state.renderToken) return
     const page = await pdf.getPage(number)
     if (token !== state.renderToken) return
-    const viewport = page.getViewport({ scale: state.scale })
+    const width = page.getViewport({ scale: 1 }).width
+    state.pageWidth = Math.max(state.pageWidth, width)
+    const viewport = page.getViewport({ scale: state.fitWidth ? Math.min(state.scale, fittedScale(width)) : state.scale })
     const sheet = document.createElement('div')
     sheet.className = 'sheet'
     const wrap = document.createElement('div')
@@ -925,7 +942,8 @@ async function renderPages() {
   if (token !== state.renderToken) return
   layoutStamps()
   $('zoom-label').textContent = `${Math.round(state.scale * 100)}%`
-  stage.scrollTop = scrollRatio * stage.scrollHeight
+  if (anchor) locateReadingPosition(anchor)
+  else stage.scrollTop = scrollRatio * stage.scrollHeight
 }
 
 async function showPdf(bytes) {
@@ -945,15 +963,17 @@ async function showPdf(bytes) {
   if (!pdf.numPages) throw new Error('这份 PDF 没有页面')
   state.pdf = pdf
   const first = await pdf.getPage(1)
-  const base = first.getViewport({ scale: 1 })
-  const available = Math.max(240, $('stage').clientWidth - 48)
-  state.scale = clamp(available / base.width, 0.55, 1.5)
+  state.pageWidth = first.getViewport({ scale: 1 }).width
+  state.fitWidth = true
+  state.scale = fittedScale()
   $('empty').hidden = true
   $('pages').hidden = false
-  enableTools(true)
   $('file-name').textContent = state.fileName
+  $('file-name').title = state.fileName
   document.title = `${state.fileName} — PDF Ping Wheel`
   await renderPages()
+  // A landscape figure can be wider than the first page. Keep a single zoom level across the paper.
+  if (state.scale !== fittedScale()) { state.scale = fittedScale(); await renderPages() }
 }
 
 async function loadFile(file, handle = null) {
@@ -1011,15 +1031,25 @@ async function loadFile(file, handle = null) {
     state.fileName = file.name || 'document.pdf'
     await showPdf(state.cleanBytes.slice())
     state.documentId = documentId
+    enableTools(true)
     resumePage()
     readingClock.activity(performance.now())
     const details = [state.pings.length ? `${state.pings.length} 个标注` : '', drafts.tokens.size ? '本地草稿已恢复' : '',
       recovered?.skipped ? '文件内容已变更，相关旧草稿已保留在本机' : '', warning].filter(Boolean)
-    setStatus(`已打开 ${state.fileName}${details.length ? ' · ' + details.join(' · ') : ''}`)
+    setStatus(`已打开 ${state.fileName}${details.length ? ' · ' + details.join(' · ') : ''}`, !warning && !drafts.tokens.size && !recovered?.skipped)
   } catch (error) {
     setStatus(`这份 PDF 打不开：${error?.message || error}`)
   } finally {
     state.loading = false
+    document.body.classList.toggle('has-document', Boolean(state.documentId))
+    if (!state.documentId) {
+      state.pdf = null
+      $('pages').hidden = true
+      $('empty').hidden = false
+      $('file-name').textContent = document.title = 'PDF Ping Wheel'
+      $('file-name').removeAttribute('title')
+      enableTools(false)
+    } else fitToStage()
     $('notebook-panel').inert = false
     $('notebook-toggle').disabled = !state.pdf || !state.documentId
     showDraftStatus()
@@ -1172,13 +1202,32 @@ async function openFromPicker() {
 }
 
 async function zoomBy(factor) {
-  if (!state.pdf) return
-  state.scale = clamp(state.scale * factor, 0.4, 3)
+  if (!state.pdf || state.loading) return
+  state.fitWidth = false
+  state.scale = clamp(state.scale * factor, Math.min(0.4, fittedScale()), 3)
   await renderPages()
 }
 
+function fittedScale(width = state.pageWidth) {
+  return Math.min(1.5, Math.max(1, $('stage').clientWidth - 48) / width)
+}
+
+let fitting = false
+async function fitToStage() {
+  if (fitting) return
+  fitting = true
+  try {
+    while (state.documentId && !state.loading && state.fitWidth && state.pageWidth && state.scale !== fittedScale()) {
+      const anchor = currentReadingPosition()
+      state.scale = fittedScale()
+      await renderPages(anchor)
+    }
+  } catch (error) { setStatus(`页面缩放失败：${error.message}`) }
+  finally { fitting = false }
+}
+
 function onKeyDown(event) {
-  if (loot?.isOpen() || state.loading || event.isComposing || event.target?.closest?.('#question-panel, #notebook-panel')) return
+  if (loot?.isOpen() || $('reader-tools').matches(':popover-open') || state.loading || event.isComposing || event.target?.closest?.('#question-panel, #notebook-panel')) return
   if (event.key === 'Escape' && state.chatOpen) {
     event.preventDefault()
     event.stopPropagation()
@@ -1259,7 +1308,7 @@ function onKeyDown(event) {
 }
 
 function onKeyUp(event) {
-  if (loot?.isOpen() || event.isComposing || event.target?.closest?.('#question-panel, #notebook-panel')) return
+  if (loot?.isOpen() || $('reader-tools').matches(':popover-open') || event.isComposing || event.target?.closest?.('#question-panel, #notebook-panel')) return
   if (isAltKey(event)) {
     event.preventDefault()
     event.stopPropagation()
@@ -1290,6 +1339,19 @@ function onPointerMove(event) {
 }
 
 function wire() {
+  const tools = $('reader-tools'), toolsToggle = $('tools-toggle')
+  function positionTools() {
+    tools.style.setProperty('--tools-top', `${Math.round(toolsToggle.getBoundingClientRect().bottom) + 6}px`)
+  }
+  tools.addEventListener('beforetoggle', event => {
+    if (event.newState === 'open') { dismissAlt(); positionTools() }
+  })
+  window.addEventListener('resize', () => { if (tools.matches(':popover-open')) positionTools() })
+  tools.addEventListener('click', event => {
+    if (!event.target.closest('.tool-actions button, #loot-open')) return
+    tools.hidePopover()
+    toolsToggle.focus({ preventScroll: true })
+  }, true)
   notebookPanel = mountNotebookPanel({
     getBook: () => state.notebook,
     getName: () => state.fileName,
@@ -1390,8 +1452,8 @@ function wire() {
   $('open').addEventListener('click', () => { openFromPicker() })
   $('open-empty').addEventListener('click', () => { openFromPicker() })
   $('save').addEventListener('click', () => { savePdf() })
-  $('mastery').addEventListener('click', () => { placeAtPointer(MASTERY.id) })
-  $('chat-toggle').addEventListener('click', () => openChatComposer())
+  $('mastery').addEventListener('click', () => { placeAtPointer(MASTERY.id, readingCenter()) })
+  $('chat-toggle').addEventListener('click', () => openChatComposer(null, readingCenter()))
   $('chat-send').addEventListener('click', submitChatNote)
   $('chat-cancel').addEventListener('click', () => closeChatComposer(true))
   $('chat-input').addEventListener('input', keepComposerDraft)
@@ -1402,14 +1464,13 @@ function wire() {
   })
   $('zoom-in').addEventListener('click', () => { zoomBy(1.15) })
   $('zoom-out').addEventListener('click', () => { zoomBy(1 / 1.15) })
-  $('fit').addEventListener('click', async () => {
-    if (!state.pdf) return
-    const base = state.views[0]?.page.getViewport({ scale: 1 })
-    if (!base) return
-    const available = Math.max(240, $('stage').clientWidth - 48)
-    state.scale = clamp(available / base.width, 0.55, 1.5)
-    await renderPages()
+  $('fit').addEventListener('click', () => { state.fitWidth = true; fitToStage() })
+  let fitTimer
+  const resizeObserver = new ResizeObserver(() => {
+    clearTimeout(fitTimer)
+    fitTimer = setTimeout(fitToStage, 150)
   })
+  resizeObserver.observe($('stage'))
   $('file').addEventListener('change', async () => {
     const file = $('file').files?.[0]
     $('file').value = ''
@@ -1435,7 +1496,7 @@ function wire() {
     loadFile(file)
   })
   document.addEventListener('pointerdown', (event) => {
-    if (loot?.isOpen() || state.loading || event.target.closest('#question-panel, #notebook-panel, #chat-composer')) return
+    if (loot?.isOpen() || state.loading || event.target.closest('#reader-tools, #question-panel, #notebook-panel, #chat-composer')) return
     const clickedPage = event.button === 0 ? pageAt(event.clientX, event.clientY) : null
     if (state.alt?.mode === 'ping' && clickedPage) {
       const [rawX, rawY] = clientToPdf(clickedPage, event.clientX, event.clientY)

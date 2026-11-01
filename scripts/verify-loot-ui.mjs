@@ -1,3 +1,4 @@
+import { clickReaderTool, exerciseReaderTools } from './reader-tools-ui.mjs'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
@@ -50,7 +51,7 @@ const extra = ALL_EMOTES.find(e => !EMOTES.some(s => s.id === e.id))
 try {
   await page.goto(url)
   await page.waitForFunction(() => document.getElementById('asset-status').textContent.includes('2423/2423'))
-  await page.click('#loot-open')
+  await clickReaderTool(page, '#loot-open')
   assert.equal(await page.locator('.loadout-slot').count(), 9)
   await page.screenshot({ path: join(out, 'collection.png'), animations: 'disabled' })
   await page.fill('#emote-search', String(extra.riotId))
@@ -61,13 +62,13 @@ try {
   // Moving an equipped emote swaps positions, and survives page reload.
   await page.click('[data-slot="2"]'); await page.click('[data-action="equip"]')
   await page.waitForFunction(({ key, id }) => JSON.parse(localStorage.getItem(key)).wheel[2] === id, { key: PROFILE_KEY, id: extra.id })
-  await page.reload(); await page.click('#loot-open')
+  await page.reload(); await clickReaderTool(page, '#loot-open')
   assert.equal((await profile()).wheel[2], extra.id)
   await page.click('[data-tab="workshop"]'); await page.click('#open-chest')
   await waitForProfile(p => p.pending.length === 3)
   const pending = (await profile()).pending
   await page.screenshot({ path: join(out, 'chest.png'), animations: 'disabled' })
-  await page.reload(); await page.click('#loot-open'); await page.click('[data-tab="workshop"]')
+  await page.reload(); await clickReaderTool(page, '#loot-open'); await page.click('[data-tab="workshop"]')
   assert.deepEqual((await profile()).pending, pending)
   await page.click(`[data-reward="${pending[0]}"]`)
   await waitForProfile(p => p.pending.length === 0 && p.owned.length === 11)
@@ -118,7 +119,7 @@ try {
   assert.equal(payload.pings.length, 4)
   assert(payload.pings.some(p => p.type === extra.id && p.assetData?.length > 100))
   assert.match(readDocumentId(doc), /^[a-f0-9]{64}$/)
-  await page.click('#loot-open'); await page.click('[data-tab="quests"]')
+  await clickReaderTool(page, '#loot-open'); await page.click('[data-tab="quests"]')
   assert.equal(await page.locator('.quest-card.is-complete').count(), 2)
   await page.screenshot({ path: join(out, 'quests.png'), animations: 'disabled' })
   // Reading time must not accumulate while shopping for emotes.
@@ -158,6 +159,7 @@ try {
   await exerciseQuestions(browser, url, out)
   await exerciseTrail(browser, url, out)
   await exerciseNotebook(browser, url, out)
+  await exerciseReaderTools(browser, url, out)
   console.log('PASS UI: search, unlock, equip, swap, drag, persistence, chests, free mode, PDF emote/note portability, task deduplication, modal pause, focus, responsive layout and offline network.')
 } finally {
   await browser.close()
