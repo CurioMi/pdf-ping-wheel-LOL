@@ -15,16 +15,18 @@
           <span id="file-name" class="file">PDF Ping Wheel</span>
           <div class="file-feedback"><span id="draft-state" aria-live="polite"></span><span id="status" class="sr-only" role="status"></span></div>
         </div>
+        <button id="reading-quests" class="trail-chip" type="button" aria-label="查看同行伙伴与阅读任务">
+          <span id="reading-emblem" aria-hidden="true"></span>
+          <span id="reading-progress">巡灯地图</span><span id="reading-layers" hidden></span>
+          <span class="trail-meter" aria-hidden="true"><i id="trail-fill"></i></span>
+          <span id="reading-seals" aria-hidden="true"></span>
+        </button>
       </div>
       <div class="file-actions with-paper">
         <button id="open" type="button" title="打开另一篇 PDF">打开</button>
         <button id="save" type="button" disabled title="保存当前 PDF 和笔记">保存</button>
       </div>
       <button id="notebook-toggle" class="with-paper" type="button" aria-controls="notebook-panel" aria-expanded="false" disabled>论文笔记</button>
-      <button id="reading-quests" class="trail-chip" type="button" aria-label="查看峡谷巡灯地图与阅读任务">
-        <svg viewBox="0 0 20 22" width="15" height="17" aria-hidden="true"><path d="m10 1 7 5-2 11-5 3-5-3L3 6Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 7l3 5-3 4-3-4Z" fill="currentColor"/></svg>
-        <span id="reading-progress">峡谷巡灯</span><span class="trail-meter" aria-hidden="true"><i id="trail-fill"></i></span>
-      </button>
       <button id="tools-toggle" type="button" popovertarget="reader-tools" aria-controls="reader-tools">工具 <span aria-hidden="true">⌄</span></button>
       <section id="reader-tools" popover="auto" aria-label="阅读工具">
         <h2>阅读工具</h2>

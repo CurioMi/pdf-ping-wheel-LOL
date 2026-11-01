@@ -9,7 +9,7 @@ export async function exerciseTrail(browser, url, out) {
   page.on('pageerror', error => errors.push(error.message))
   const start = new Date('2026-11-01T09:00:00Z')
   // Simulate an existing v1.6 profile without a separate trail or focus-session field.
-  const old = newProfile(); old.totalMs = 46 * 60000
+  const old = newProfile(); delete old.companion; old.totalMs = 46 * 60000
   old.reviewReceipts = ['previous-paper:one', 'previous-paper:two', 'previous-paper:three']
   old.days['2026-11-01'] = { ms: 6 * 60000, pages: [], notes: 0, reviews: 0, claimed: [] }
   await page.addInitScript(({ key, profile }) => {

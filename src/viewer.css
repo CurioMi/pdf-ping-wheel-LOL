@@ -51,10 +51,18 @@ button:focus-visible {
 
 [hidden] { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-#reading-quests { grid-area: trail; display: inline-flex; align-items: center; justify-content: center; gap: 7px; color: #c0c6bb; background: transparent; border-color: transparent; font-size: 12px; }
+#reading-quests { display: inline-flex; align-items: center; justify-content: center; flex: none; margin-left: auto; gap: 6px; padding: 2px 7px; min-height: 30px; color: #c0c6bb; background: transparent; border-color: transparent; font-size: 12px; }
 #reading-quests:hover { border-color: #45544f; }
-.trail-chip svg { color: #91a0a1; flex: none; }
-.trail-chip.is-reading svg { color: #d7b778; }
+#reading-emblem, #reading-emblem svg { display: block; width: 25px; height: 25px; }
+#reading-layers { font-variant-numeric: tabular-nums; color: #d7c39e; }
+#reading-seals { display: inline-flex; gap: 6px; align-items: center; padding-left: 8px; margin-left: 1px; border-left: 1px solid #39454b; }
+#reading-seals:empty { display: none; }
+.task-seal { position: relative; display: inline-flex; flex: none; color: #89979f; }
+.task-seal svg { width: 16px; height: 16px; }
+.task-seal[data-status="started"] { color: #d4bf90; }
+.task-seal[data-status="done"] { color: #a0cfb6; }
+.task-seal[data-status="started"]::after, .task-seal[data-status="done"]::after { content: ''; position: absolute; right: -2px; bottom: -1px; background: #dabd81; width: 4px; height: 4px; border-radius: 50%; }
+.task-seal[data-status="done"]::after { width: 5px; height: 3px; border: solid #a0cfb6; border-width: 0 0 1.6px 1.6px; border-radius: 0; transform: rotate(-45deg); background: #101820; }
 .trail-meter { display: inline-block; overflow: hidden; width: 26px; height: 3px; border-radius: 2px; background: #32474c; }
 .trail-meter i { display: block; height: 100%; background: #bba779; }
 #loot-open.has-rewards::after, .bar:has(#loot-open.has-rewards) #reading-quests::after { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #e7c57e; }
@@ -230,6 +238,35 @@ button:focus-visible {
 .quest-card.is-complete { border-color: #537260; }
 .quest-symbol { color: #c4ac79; padding-top: 4px; font-size: 22px; }
 .is-complete .quest-symbol { color: #75bda4; }
+.quest-symbol svg { display: block; width: 21px; height: 21px; }
+.companion-card { container-type: inline-size; padding: 16px 18px 12px; margin-bottom: 16px; border: 1px solid #3e5158; border-radius: 6px; background: #10212a; }
+.companion-card header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+#loot .companion-card h2 { margin: 0; font-size: 17px; color: #e1d5b8; }
+.companion-card select { max-width: 100%; padding: 4px 8px; border: 1px solid #465962; border-radius: 4px; background: #132832; color: #d6e1e2; font: inherit; font-size: 12px; }
+.companion-display { display: grid; grid-template-columns: 82px minmax(0, 1fr) minmax(200px, 36%); gap: 16px; align-items: center; margin: 13px 0; --glow: #638b83; }
+.companion-display[data-track="smolder"] { --glow: #ac7651; }
+.companion-display[data-track="sol"] { --glow: #718bc5; }
+.companion-display[data-track="harvest"] { --glow: #a86d85; }
+.companion-portrait { display: grid; place-items: center; aspect-ratio: 1; border-radius: 50%; border: 1px solid color-mix(in srgb,var(--glow) 55%,transparent); background: radial-gradient(circle at 50% 70%,color-mix(in srgb,var(--glow) 24%,transparent),transparent 80%), #101d29; }
+.companion-portrait svg { width: 76%; height: 76%; }
+.companion-stage { font-size: 13px; color: #d6dfe2; }
+.companion-count { display: block; margin: 2px 0; color: #e3cca0; font-size: 23px; font-weight: 500; overflow-wrap: anywhere; }
+.companion-count small { font-size: 12px; }
+#loot .companion-display p, #loot .companion-hint { margin: 4px 0; color: #a3b6bf; font-size: 12px; line-height: 1.6; }
+.companion-next { color: #d1c1a1; font-size: 11px; }
+.companion-forms { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; margin: 0; padding: 0; list-style: none; }
+.companion-forms li { position: relative; display: grid; justify-items: center; gap: 3px; padding: 4px 0; font-size: 11px; color: #acbdc4; }
+.companion-forms svg { width: 30px; height: 30px; }
+.companion-forms [data-reached="false"] svg { opacity: .42; filter: grayscale(.85); }
+.companion-forms [aria-current] { border-radius: 6px; background: color-mix(in srgb,var(--glow) 16%,transparent); color: #f1d4a3; }
+.companion-forms small { color: #99acb5; font-size: 10px; }
+@container (max-width: 590px) {
+  .companion-display { grid-template-columns: 64px minmax(0, 1fr); gap: 9px; }
+  .companion-forms { grid-column: 1 / -1; }
+}
+.companion-tasks { display: flex; flex-wrap: wrap; gap: 7px 18px; padding: 9px 0 5px; border-top: 1px solid #34464e; }
+.companion-tasks > span { display: inline-flex; align-items: center; gap: 6px; color: #bacacf; font-size: 12px; }
+.companion-tasks b { font-weight: 500; font-variant-numeric: tabular-nums; }
 .quest-copy { flex: 1; min-width: 0; }
 .quest-copy h3 { font-size: 14px; font-weight: 500; margin-bottom: 8px; }
 .quest-copy p { color: #849eac; font-size: 11px; line-height: 1.65; min-height: 34px; }
@@ -260,8 +297,8 @@ button:focus-visible {
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
 .bar {
-  display: grid; grid-template-areas: "identity files notebook trail tools";
-  grid-template-columns: minmax(0, 1fr) auto auto auto auto; align-items: center;
+  display: grid; grid-template-areas: "identity files notebook tools";
+  grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center;
   gap: 8px; min-height: 52px; padding: 8px 14px; background: var(--bar); border-bottom: 1px solid #333c43;
 }
 body:not(.has-document) .with-paper { display: none; }
@@ -301,12 +338,16 @@ body:not(.has-document) .with-paper { display: none; }
 #help p { margin: 7px 0; }
 #help .asset-status { font-size: 11px; }
 @media (max-width: 640px) {
-  .bar { grid-template-areas: "identity trail tools"; grid-template-columns: minmax(0, 1fr) auto auto; padding: 5px 10px; gap: 3px 6px; min-height: 44px; }
-  .has-document .bar { grid-template-areas: "identity identity identity identity" "files notebook trail tools"; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 5px; }
+  .bar { grid-template-areas: "identity tools"; grid-template-columns: minmax(0, 1fr) auto; padding: 5px 10px; gap: 3px 6px; min-height: 44px; }
+  .has-document .bar { grid-template-areas: "identity identity identity identity" "files notebook . tools"; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 3px 5px; }
   .bar > button, .file-actions button { min-height: 32px; padding: 4px 9px; }
   .reader-identity img { width: 18px; height: 18px; }
   .file { font-size: 13px; }
-  #reading-quests { justify-self: end; gap: 4px; padding: 3px 5px; }
+  #reading-quests { gap: 4px; padding: 0 3px; min-height: 24px; }
+  #reading-emblem, #reading-emblem svg { width: 21px; height: 21px; }
+  #reading-seals { gap: 5px; padding-left: 6px; }
+  #reading-seals svg { width: 14px; height: 14px; }
+  .companion-display { grid-template-columns: 64px minmax(0, 1fr); gap: 10px; }
   .has-document #reading-progress { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .trail-meter { width: 17px; }
 }

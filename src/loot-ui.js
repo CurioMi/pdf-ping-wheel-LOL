@@ -1,6 +1,8 @@
 import { ALL_EMOTES, CATALOG_INFO, pingById } from './pings.js'
 import { hasIcon, iconMarkup } from './ping-assets.js'
 import { renderTrailCard } from './reading-trail.js'
+import { companionId } from './companions.js'
+import { companionOptions, companionDetail, readerTasks, taskGlyph } from './companion-ui.js'
 import {
   DAILY_QUESTS, MILESTONE_QUESTS, EMOTE_COST, LEVEL_XP, STARTER_IDS,
   dayKey, usableWheel, canEquip, ownedEmote, equipEmote, unlockEmote, openChest, claimChest, questProgress,
@@ -47,7 +49,14 @@ export function mountLoot({ store, onOpen = () => {}, onClose = () => {} }) {
           <div class="collection-pagination"><button id="emotes-prev">上一页</button><span id="emotes-page" aria-live="polite"></span><button id="emotes-next">下一页</button></div>
         </div>
         <div id="workshop-pane" hidden></div>
-        <div id="quests-pane" hidden></div>
+        <div id="quests-pane" hidden>
+          <section id="companion-card" class="companion-card" aria-labelledby="companion-title">
+            <header><h2 id="companion-title">同行伙伴</h2>
+              <label><span class="sr-only">选择阅读伙伴</span><select id="companion-choice">${companionOptions}</select></label>
+            </header><div id="companion-detail"></div>
+          </section>
+          <div id="quest-list"></div>
+        </div>
       </section>
     </div>
     <footer class="loot-footer">
@@ -136,9 +145,11 @@ export function mountLoot({ store, onOpen = () => {}, onClose = () => {} }) {
     const card = q => {
       const progress = questProgress(p, q, key)
       const rewards = [`${q.xp} XP`, q.essence ? `${q.essence} 精粹` : '', q.chests ? `${q.chests} 宝箱` : ''].filter(Boolean).join(' + ')
-      return `<article class="quest-card ${progress.claimed ? 'is-complete' : ''}"><div class="quest-symbol">${progress.claimed ? '✓' : '◇'}</div><div class="quest-copy"><h3>${q.title}</h3><p>${q.description}</p><progress max="${q.goal}" value="${progress.value}" aria-label="${q.title}"></progress><div class="quest-bottom"><span>${Math.floor(progress.value)} / ${q.goal}</span><span>${rewards}</span><strong>${progress.claimed ? '奖励已到账' : '进行中'}</strong></div></div></article>`
+      return `<article class="quest-card ${progress.claimed ? 'is-complete' : ''}"><div class="quest-symbol">${taskGlyph(q.metric)}</div><div class="quest-copy"><h3>${q.title}</h3><p>${q.description}</p><progress max="${q.goal}" value="${progress.value}" aria-label="${q.title}"></progress><div class="quest-bottom"><span>${Math.floor(progress.value)} / ${q.goal}</span><span>${rewards}</span><strong>${progress.claimed ? '奖励已到账' : '进行中'}</strong></div></div></article>`
     }
-    $('quests-pane').innerHTML = `${renderTrailCard(p.totalMs, trailChapter, p.reviewReceipts.length)}
+    $('companion-choice').value = p.companion
+    $('companion-detail').innerHTML = companionDetail(p, readerTasks(p, key))
+    $('quest-list').innerHTML = `${renderTrailCard(p.totalMs, trailChapter, p.reviewReceipts.length)}
       <div class="reading-stats"><div><strong>${Math.floor((day?.ms || 0) / 60000)}<small> 分钟</small></strong><span>今日有效阅读</span></div><div><strong>${p.noteHashes.length}<small> 条</small></strong><span>累计有效笔记</span></div><div><strong>${p.activeDays.length}<small> 天</small></strong><span>累计阅读日</span></div></div>
       <h3 class="quest-group-title">每日任务 <span>${key} · 本地时间零点更新</span></h3><div class="quest-grid">${DAILY_QUESTS.map(card).join('')}</div>
       <h3 class="quest-group-title">成长里程碑 <span>长期有效，无需连续签到</span></h3><div class="quest-grid">${MILESTONE_QUESTS.map(card).join('')}</div>
@@ -162,6 +173,14 @@ export function mountLoot({ store, onOpen = () => {}, onClose = () => {} }) {
     shownDay = dayKey()
   }
   const switchTab = name => { tab = name; trailChapter = null; render(); dialog.querySelector('.loot-content').scrollTop = 0 }
+  $('companion-choice').addEventListener('change', async event => {
+    const id = companionId(event.target.value)
+    try { await store.mutate(p => { p.companion = id }) }
+    catch (error) {
+      $('companion-choice').value = store.get().companion
+      notify(error.message || '伙伴选择未保存，请重试')
+    }
+  })
   dialog.addEventListener('click', async event => {
     const target = event.target.closest('button'); if (!target) return
     if (target.dataset.trailChapter !== undefined) {

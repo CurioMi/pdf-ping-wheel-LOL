@@ -1,4 +1,5 @@
 import { ALL_EMOTES, EMOTES, pingById } from './pings.js'
+import { companionId } from './companions.js'
 
 export const PROFILE_KEY = 'pdf-ping-wheel:loot:v1'
 export const EMOTE_COST = 100
@@ -15,7 +16,7 @@ export function dayKey(date = new Date()) {
 
 export function newProfile() {
   return {
-    version: 1, mode: 'quest', essence: 300, chests: 1, xp: 0,
+    version: 1, mode: 'quest', companion: 'smolder', essence: 300, chests: 1, xp: 0,
     owned: [...STARTER_IDS], wheel: [...STARTER_IDS], favorites: [],
     totalMs: 0, noteReceipts: [], noteHashes: [], reviewReceipts: [], activeDays: [],
     days: {}, milestones: [], pending: [], lastReadAt: 0,
@@ -27,6 +28,7 @@ export function normalizeProfile(raw) {
   const p = newProfile()
   for (const key of ['essence', 'chests', 'xp', 'totalMs', 'lastReadAt']) p[key] = finiteInt(raw[key])
   p.mode = raw.mode === 'free' ? 'free' : 'quest'
+  p.companion = companionId(raw.companion)
   p.owned = unique([...STARTER_IDS, ...unique(raw.owned)]) // Keep IDs from newer catalogs when importing older builds.
   p.favorites = unique(raw.favorites)
   p.noteReceipts = unique(raw.noteReceipts)

@@ -29,6 +29,8 @@ import { mountQuestionPanel } from './question-panel.js'
 import { mountNotebookPanel } from './notebook-panel.js'
 import { setNotebookPart } from './notebook.js'
 import { LAMP_MS, readingTrail } from './reading-trail.js'
+import { companionState } from './companions.js'
+import { companionGlyph, readerTasks, taskSeal } from './companion-ui.js'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdf.worker.min.mjs', document.baseURI).href
 
@@ -95,15 +97,32 @@ function updateReadingHud() {
   const minutes = Math.floor(trail.progressMs / 60000)
   const remaining = readingClock.quietRemainingMs
   const prefix = remaining ? (foreground ? '静读中 · ' : '静读暂停 · ') : ''
-  const label = state.documentId ? `${prefix}${trail.nextStop} · ${minutes}/10 分` : '巡灯地图'
+  const pet = state.documentId ? companionState(profile) : null
+  const label = !state.documentId ? '巡灯地图' : prefix + (pet?.name ?? `${trail.nextStop} · ${minutes}/10 分`)
   $('reading-progress').textContent = label
+  const emblem = $('reading-emblem'), form = pet ? pet.id + '-' + pet.stage : 'lantern'
+  if (emblem.dataset.form !== form) {
+    emblem.innerHTML = companionGlyph(pet)
+    emblem.dataset.form = form
+  }
+  $('reading-layers').hidden = !pet
+  if (pet) $('reading-layers').textContent = `${pet.layers > 999 ? '999+' : pet.layers} 层`
+  $('trail-fill').parentElement.hidden = Boolean(pet)
   $('trail-fill').style.width = `${trail.progressMs / LAMP_MS * 100}%`
+  const today = dayKey(), tasks = state.documentId ? readerTasks(profile, today) : []
+  const taskHints = tasks.map(task => task.hint).join('。')
+  const seals = $('reading-seals'), signature = tasks.map(task => task.count + task.status).join('/')
+  if (signature !== seals.dataset.signature) {
+    seals.innerHTML = tasks.map(taskSeal).join('')
+    seals.dataset.signature = signature
+  }
   const chip = $('reading-quests')
   chip.classList.toggle('is-reading', active)
   const status = !state.documentId ? '打开 PDF 后自动开始' : active ? '阅读中' : '计时暂停'
   const reward = $('loot-open').classList.contains('has-rewards') ? '新战利品已到账。' : ''
-  chip.title = `${status}。今日阅读 ${Math.floor((profile.days[dayKey()]?.ms || 0) / 60000)} 分钟，累计点亮 ${trail.lights} 盏。${reward}点击查看地图与任务。`
-  chip.setAttribute('aria-label', `${label}。${chip.title}`)
+  const companionHint = pet ? `${pet.name} · ${pet.form}，${pet.layers} 层${pet.unit}。` : ''
+  chip.title = `${companionHint}${status}。今日阅读 ${Math.floor((profile.days[today]?.ms || 0) / 60000)} 分钟，累计点亮 ${trail.lights} 盏。${reward}点击查看伙伴、地图与任务。`
+  chip.setAttribute('aria-label', `${label}。${chip.title}${taskHints}`)
 
   const quiet = $('quiet-reading')
   quiet.disabled = !state.documentId || state.loading

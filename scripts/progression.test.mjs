@@ -2,6 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ALL_EMOTES, EMOTES } from '../src/pings.js'
 import { readingTrail, LAMP_MS } from '../src/reading-trail.js'
+import { COMPANIONS, companionState } from '../src/companions.js'
+import { companionGlyph, readerTasks } from '../src/companion-ui.js'
 import {
   newProfile, normalizeProfile, usableWheel, equipEmote, unlockEmote, openChest, claimChest,
   recordReading, recordSavedMarks, recordQuestionReviews, qualifyingNote, grantCompleted, createReadingClock,
@@ -10,6 +12,60 @@ import {
 
 const extra = ALL_EMOTES.filter(e => !EMOTES.some(s => s.id === e.id))
 const doc = 'a'.repeat(64)
+
+test('new readers get an egg, older readers keep their lantern, and backups retain the selected companion', async () => {
+  const p = newProfile()
+  assert.equal(companionState(p).form, '龙蛋')
+  delete p.companion
+  p.totalMs = 37 * 60000
+  assert.equal(companionState(normalizeProfile(p)), null)
+  assert.equal(normalizeProfile({ ...p, companion: '__proto__' }).companion, 'lantern')
+  const storage = memoryStorage(), store = createProfileStore({ storage, locks: null })
+  await store.restore(p)
+  await store.mutate(next => { next.companion = 'smolder' })
+  const reopened = createProfileStore({ storage, locks: null })
+  assert.equal(companionState(reopened.get()).layers, 7)
+  assert.equal(JSON.parse(reopened.export()).companion, 'smolder')
+  assert.equal(reopened.get().xp, p.xp)
+})
+
+test('every companion changes shape at its own thresholds and keeps stacking after its final form', () => {
+  for (const [id, pet] of Object.entries(COMPANIONS)) {
+    const faces = new Set()
+    for (const [stage, [layers, name]] of pet.forms.entries()) {
+      const p = newProfile()
+      if (id === 'harvest') p.reviewReceipts = Array.from({ length: layers }, (_, n) => doc + ':' + n)
+      else p.totalMs = layers * (id === 'smolder' ? 300000 : 600000)
+      const state = companionState(p, id)
+      assert.equal(state.stage, stage); assert.equal(state.form, name); assert.equal(state.layers, layers)
+      faces.add(companionGlyph(state))
+    }
+    assert.equal(faces.size, 4)
+  }
+  const p = newProfile(); p.totalMs = 2000 * 300000
+  assert.equal(companionState(p).layers, 2000)
+  assert.equal(companionState(p).next, undefined)
+})
+
+test('layers use credited time, unique document pages and unique resolved questions across dates', () => {
+  const p = newProfile(), today = '2026-11-01', tomorrow = '2026-11-02'
+  p.totalMs = 599000
+  p.days[today] = { ms: 599000, pages: [], notes: 0, reviews: 0, claimed: [] }
+  assert.equal(companionState(p).layers, 1)
+  recordReading(p, 1000, new Date(today + 'T12:00:00').getTime())
+  assert.equal(companionState(p).layers, 2)
+  const mark = { id: 'mark', page: 2 }
+  recordSavedMarks(p, doc, [mark, { ...mark, id: 'another' }], today)
+  recordSavedMarks(p, doc, [mark], tomorrow)
+  recordSavedMarks(p, 'b'.repeat(64), [mark], tomorrow)
+  assert.equal(companionState(p, 'sol').layers, 3)
+  recordQuestionReviews(p, doc, ['one', 'one'], today)
+  recordQuestionReviews(p, doc, ['one'], tomorrow)
+  assert.equal(companionState(p, 'harvest').layers, 1)
+  assert.deepEqual(readerTasks(p, today).map(t => t.status), ['done', 'started', 'done'])
+  assert.deepEqual(readerTasks(p, '2026-11-03').map(t => t.status), ['empty', 'empty', 'empty'])
+  assert.equal(companionState(normalizeProfile(JSON.parse(JSON.stringify(p))), 'sol').layers, 3)
+})
 
 test('a newly resolved question earns daily XP only once, including after profile reload and across days', () => {
   const profile = newProfile()
