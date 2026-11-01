@@ -16,7 +16,7 @@ export function newProfile() {
   return {
     version: 1, mode: 'quest', essence: 300, chests: 1, xp: 0,
     owned: [...STARTER_IDS], wheel: [...STARTER_IDS], favorites: [],
-    totalMs: 0, noteReceipts: [], noteHashes: [], activeDays: [],
+    totalMs: 0, noteReceipts: [], noteHashes: [], reviewReceipts: [], activeDays: [],
     days: {}, milestones: [], pending: [], lastReadAt: 0,
   }
 }
@@ -30,13 +30,14 @@ export function normalizeProfile(raw) {
   p.favorites = unique(raw.favorites)
   p.noteReceipts = unique(raw.noteReceipts)
   p.noteHashes = unique(raw.noteHashes)
+  p.reviewReceipts = unique(raw.reviewReceipts)
   p.activeDays = unique(raw.activeDays).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d))
   p.milestones = unique(raw.milestones)
   p.pending = unique(raw.pending).filter(id => validEmotes.has(id)).slice(0, 3)
   if (raw.days && typeof raw.days === 'object' && !Array.isArray(raw.days)) {
     for (const [date, day] of Object.entries(raw.days)) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !day || typeof day !== 'object') continue
-      p.days[date] = { ms: finiteInt(day.ms), pages: unique(day.pages), notes: finiteInt(day.notes), claimed: unique(day.claimed) }
+      p.days[date] = { ms: finiteInt(day.ms), pages: unique(day.pages), notes: finiteInt(day.notes), reviews: finiteInt(day.reviews), claimed: unique(day.claimed) }
     }
   }
   p.wheel = usableWheel({ ...p, wheel: Array.isArray(raw.wheel) ? raw.wheel : STARTER_IDS })
@@ -98,6 +99,7 @@ export const DAILY_QUESTS = [
   { id: 'deep-focus', title: '专注推塔', description: '今天累计有效阅读 25 分钟', metric: 'minutes', goal: 25, xp: 100, essence: 0, chests: 1 },
   { id: 'vision', title: '布置视野', description: '在 3 个不同页面留下新标记，并保存 PDF', metric: 'pages', goal: 3, xp: 50, essence: 50, chests: 0 },
   { id: 'insight', title: '洞察之眼', description: '写下 3 条不同的有效笔记，并保存 PDF', metric: 'notes', goal: 3, xp: 100, essence: 100, chests: 0 },
+  { id: 'revisit', title: '疑问回访', description: '为一个问号写下疑问与理解，标为已解决并保存 PDF', metric: 'reviews', goal: 1, xp: 25, essence: 0, chests: 0 },
 ]
 export const MILESTONE_QUESTS = [
   { id: 'hour', title: '初探峡谷', description: '累计有效阅读 60 分钟', metric: 'totalMinutes', goal: 60, xp: 150, essence: 100, chests: 1 },
@@ -108,12 +110,12 @@ export const MILESTONE_QUESTS = [
 ]
 
 function ensureDay(p, key) {
-  return p.days[key] ||= { ms: 0, pages: [], notes: 0, claimed: [] }
+  return p.days[key] ||= { ms: 0, pages: [], notes: 0, reviews: 0, claimed: [] }
 }
 
 export function questProgress(p, quest, key = dayKey()) {
   const day = p.days[key] || { ms: 0, pages: [], notes: 0, claimed: [] }
-  const metrics = { minutes: day.ms / 60000, pages: day.pages.length, notes: day.notes,
+  const metrics = { minutes: day.ms / 60000, pages: day.pages.length, notes: day.notes, reviews: day.reviews || 0,
     totalMinutes: p.totalMs / 60000, totalNotes: p.noteHashes.length, days: p.activeDays.length }
   return { value: Math.min(quest.goal, metrics[quest.metric] || 0),
     claimed: (quest.metric.startsWith('total') || quest.metric === 'days' ? p.milestones : day.claimed).includes(quest.id) }
@@ -169,6 +171,18 @@ export function recordSavedMarks(p, documentId, marks, key = dayKey()) {
     }
   }
   return grantCompleted(p, key)
+}
+
+export function recordQuestionReviews(profile, documentId, ids, key = dayKey()) {
+  if (!ids.length || !/^[a-f0-9]{64}$/.test(documentId)) return []
+  const day = ensureDay(profile, key)
+  for (const id of ids) {
+    const receipt = `${documentId}:${id}`
+    if (profile.reviewReceipts.includes(receipt)) continue
+    profile.reviewReceipts.push(receipt)
+    day.reviews++
+  }
+  return grantCompleted(profile, key)
 }
 
 export function createReadingClock() {

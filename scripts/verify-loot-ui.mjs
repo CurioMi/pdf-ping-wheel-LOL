@@ -7,6 +7,7 @@ import { PDFDocument, StandardFonts } from 'pdf-lib'
 import { ALL_EMOTES, EMOTES } from '../src/pings.js'
 import { readPingPayload, readDocumentId } from '../src/pdf-io.js'
 import { PROFILE_KEY } from '../src/progression.js'
+import { exerciseQuestions } from './verify-question-ui.mjs'
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -152,6 +153,7 @@ try {
   await page.screenshot({ path: join(out, 'mobile.png'), animations: 'disabled' })
   assert(await page.locator('#loot').evaluate(el => el.scrollWidth <= el.clientWidth))
   assert.deepEqual(errors, []); assert.deepEqual(external, [])
+  await exerciseQuestions(browser, url, out)
   console.log('PASS UI: search, unlock, equip, swap, drag, persistence, chests, free mode, PDF emote/note portability, task deduplication, modal pause, focus, responsive layout and offline network.')
 } finally {
   await browser.close()

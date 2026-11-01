@@ -120,6 +120,25 @@ assert.equal(noteAnnotation.lookup(PDFName.of('Contents'), PDFHexString).decodeT
 
 // Emote PNG bytes are indexed once in the PDF metadata so a second machine can restore the overlay.
 const emoteData = Buffer.from(png).toString('base64')
+// A question's expanded text belongs to the stamp's comment, never to the visible page art.
+const questions = [18, 27, 36].map((size, i) => ({ ...ping, id: `question-${i}`, type: 'question', width: size, height: size,
+  questionNote: '这组数据为何归一化？\n<&>', answer: '为了比较不同量纲。', resolved: i === 0 }))
+const questionDoc = await PDFDocument.load(await buildSavedPdf(clean, questions, pngByType))
+const reopenedQuestions = readPingPayload(questionDoc).pings
+for (const [index, mark] of reopenedQuestions.entries()) {
+  assert.equal(mark.width, questions[index].width); assert.equal(mark.height, questions[index].height)
+  assert.equal(mark.questionNote, questions[index].questionNote); assert.equal(mark.answer, questions[index].answer)
+  assert.equal(mark.resolved, questions[index].resolved)
+  const annot = questionDoc.context.lookup(questionDoc.getPages()[0].node.normalizedEntries().Annots.get(index + 1))
+  assert(annot.lookup(PDFName.of('Contents'), PDFHexString).decodeText().includes(mark.answer))
+}
+// A pre-v1.6.1 question has only its generic display label. That label is not a user note.
+const oldQuestion = questionDoc.context.lookup(questionDoc.getPages()[0].node.normalizedEntries().Annots.get(3))
+const oldMeta = oldQuestion.lookup(PDFName.of('PDFPingWheel'), PDFDict)
+for (const key of ['questionNote', 'answer', 'resolved']) oldMeta.delete(PDFName.of(key))
+oldQuestion.set(PDFName.of('Contents'), PDFHexString.fromText('PDF Ping Wheel — 敌人不见了'))
+const oldMark = readPingPayload(questionDoc).pings[2]
+assert.equal(oldMark.questionNote, ''); assert.equal(oldMark.resolved, false); assert.equal(oldMark.width, 36)
 const emoteSaved = await buildSavedPdf(clean, [{ ...ping, id: 'emote-test', type: 'emote_thumb', assetData: emoteData }], pngByType)
 const emoteDoc = await PDFDocument.load(emoteSaved)
 const emotePayload = readPingPayload(emoteDoc)

@@ -3,12 +3,23 @@ import assert from 'node:assert/strict'
 import { ALL_EMOTES, EMOTES } from '../src/pings.js'
 import {
   newProfile, normalizeProfile, usableWheel, equipEmote, unlockEmote, openChest, claimChest,
-  recordReading, recordSavedMarks, qualifyingNote, grantCompleted, createReadingClock,
+  recordReading, recordSavedMarks, recordQuestionReviews, qualifyingNote, grantCompleted, createReadingClock,
   createProfileStore, PROFILE_KEY, dayKey,
 } from '../src/progression.js'
 
 const extra = ALL_EMOTES.filter(e => !EMOTES.some(s => s.id === e.id))
 const doc = 'a'.repeat(64)
+
+test('a newly resolved question earns daily XP only once, including after profile reload and across days', () => {
+  const profile = newProfile()
+  const today = '2026-11-01', tomorrow = '2026-11-02'
+  assert.deepEqual(recordQuestionReviews(profile, doc, ['question-1'], today), ['疑问回访'])
+  assert.equal(profile.xp, 25)
+  const restored = normalizeProfile(JSON.parse(JSON.stringify(profile)))
+  assert.deepEqual(recordQuestionReviews(restored, doc, ['question-1'], tomorrow), [])
+  assert.deepEqual(recordQuestionReviews(restored, doc, ['question-2', 'question-3'], tomorrow), ['疑问回访'])
+  assert.equal(restored.xp, 50)
+})
 const time = new Date(2026, 9, 31, 12).getTime()
 function memoryStorage() {
   const values = new Map()

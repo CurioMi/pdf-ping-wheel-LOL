@@ -7,6 +7,16 @@ import catalog from './emote-catalog.json' with { type: 'json' }
 export const PING_SIZE = 36
 export const EMOTE_SIZE = 48
 export const MASTERY_SIZE = 48
+export const MARKER_SCALES = Object.freeze({ small: 0.5, medium: 0.75, large: 1 })
+export const QUESTION_MAX_CHARS = 1000
+
+export function markerSize(type, preset = 'small') {
+  return stampSize(type) * (MARKER_SCALES[preset] ?? MARKER_SCALES.small)
+}
+
+export function questionText(value) {
+  return typeof value === 'string' ? value.replace(/\r\n?/g, '\n').slice(0, QUESTION_MAX_CHARS) : ''
+}
 export const QUICK_TAP_MS = 350
 export const QUICK_TAP_PX = 12
 
