@@ -1,6 +1,6 @@
 {
   "name": "pdf-ping-wheel",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "private": true,
   "type": "module",
   "description": "PDF stamp editor with League-style ping, emote and mastery hotkeys using native editable Stamp annotations.",

@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ALL_EMOTES, EMOTES } from '../src/pings.js'
+import { readingTrail, LAMP_MS } from '../src/reading-trail.js'
 import {
   newProfile, normalizeProfile, usableWheel, equipEmote, unlockEmote, openChest, claimChest,
   recordReading, recordSavedMarks, recordQuestionReviews, qualifyingNote, grantCompleted, createReadingClock,
@@ -112,6 +113,62 @@ test('overlapping reading ticks are not double counted', () => {
   recordReading(p, 5000, time); recordReading(p, 5000, time)
   assert.equal(p.totalMs, 5000)
   recordReading(p, 5000, time + 1000); assert.equal(p.totalMs, 6000)
+})
+
+test('the first lamp sums short reading sessions on separate days, and survives exporting an old profile', () => {
+  const p = newProfile()
+  for (let i = 0; i < 72; i++) recordReading(p, 5000, time + i * 5000)
+  assert.equal(readingTrail(p.totalMs).progressMs, 360000)
+  for (let i = 0; i < 48; i++) recordReading(p, 5000, time + 86400000 + i * 5000)
+  const trail = readingTrail(normalizeProfile(JSON.parse(JSON.stringify(p))).totalMs)
+  assert.equal(trail.lights, 1); assert.equal(trail.litHere, 1); assert.equal(trail.progressMs, 0)
+  assert.equal(trail.nextStop, '松间哨站')
+})
+
+test('four lit landmarks keep their finished map; subsequent routes rotate and old chapters can be revisited', () => {
+  const elapsed = 4 * LAMP_MS
+  assert.equal(readingTrail(elapsed - 1).currentChapter, 0)
+  const next = readingTrail(elapsed)
+  assert.equal(next.currentChapter, 1); assert.equal(next.litHere, 0); assert.equal(next.route.name, '薄雾山径')
+  const first = readingTrail(elapsed, 0)
+  assert.equal(first.route.name, '萤溪谷'); assert.equal(first.litHere, 4)
+  assert.equal(readingTrail(elapsed, 999).chapter, 1)
+  assert.equal(readingTrail(12 * LAMP_MS).route.name, first.route.name)
+  assert.equal(readingTrail(NaN).lights, 0)
+})
+
+test('quiet reading counts without input for exactly ten foreground minutes, including a partial last tick', () => {
+  const clock = createReadingClock(); clock.startQuiet(0)
+  let credited = 0
+  for (let t = 7000; t <= 602000; t += 7000) credited += clock.tick(t, true)
+  assert.equal(credited, 600000); assert.equal(clock.quietRemainingMs, 0)
+  assert.equal(clock.tick(609000, true), 0)
+  clock.activity(610000); assert.equal(clock.tick(610000, true), 0)
+  assert.equal(clock.tick(615000, true), 5000)
+})
+
+test('pausing or sleeping preserves the unused quiet budget, and ending it returns to normal idle rules', () => {
+  const clock = createReadingClock(); clock.startQuiet(0)
+  assert.equal(clock.tick(5000, true), 5000)
+  clock.reset(); assert.equal(clock.tick(65000, false), 0)
+  assert.equal(clock.tick(70000, true), 0)
+  assert.equal(clock.tick(75000, true), 5000)
+  assert.equal(clock.tick(375000, true), 0)
+  assert.equal(clock.quietRemainingMs, 590000)
+  clock.endQuiet(); assert.equal(clock.quietRemainingMs, 0)
+  assert.equal(clock.tick(380000, true), 0)
+})
+
+test('looking up a reference before the next timer tick credits the actual fragment just once', () => {
+  const clock = createReadingClock(); clock.activity(0)
+  assert.equal(clock.pause(2400), 2400)
+  assert.equal(clock.pause(2600), 0)
+  assert.equal(clock.tick(30000, false), 0)
+  clock.activity(40000)
+  assert.equal(clock.tick(45000, true), 5000)
+  clock.startQuiet(45000)
+  assert.equal(clock.pause(47250), 2250)
+  assert.equal(clock.quietRemainingMs, 597750)
 })
 
 test('saved notes and distinct pages award rewards only once; edits and duplicated text do not farm notes', () => {

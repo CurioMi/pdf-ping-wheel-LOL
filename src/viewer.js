@@ -26,6 +26,7 @@ import { createProfileStore, wheelSpecs, createReadingClock, recordReading, reco
 import { mountLoot } from './loot-ui.js'
 import { DocumentDrafts, flushDrafts } from './reader-drafts.js'
 import { mountQuestionPanel } from './question-panel.js'
+import { LAMP_MS, readingTrail } from './reading-trail.js'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdf.worker.min.mjs', document.baseURI).href
 
@@ -62,7 +63,6 @@ const state = {
 
 const pngCache = new Map()
 const readingClock = createReadingClock()
-let lastReadingInput = -Infinity
 let loot
 let questionPanel
 let sizePreset = 'small'
@@ -79,13 +79,56 @@ const currentEmoteWheel = () => wheelSpecs(profileStore.get())
 const centerEmote = () => currentEmoteWheel()[0]
 const escapeLabel = text => String(text).replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'})[char])
 
-function readingActive() {
-  return Boolean(state.pdf && state.documentId && !state.loading && !document.hidden && document.hasFocus() && !loot?.isOpen() && performance.now() - lastReadingInput <= 120000)
+function readingForeground() {
+  return Boolean(state.pdf && state.documentId && !state.loading && !document.hidden && document.hasFocus() && !loot?.isOpen())
 }
 function updateReadingHud() {
-  const p = profileStore.get(), day = p.days[dayKey()]
-  const status = readingActive() ? '阅读中' : state.pdf ? '计时暂停' : '等你开卷'
-  $('reading-progress').textContent = `Lv.${1 + Math.floor(p.xp / 200)} · ${status} · 今日 ${Math.floor((day?.ms || 0) / 60000)} 分钟 · 研究精粹 ${p.essence}`
+  const profile = profileStore.get(), trail = readingTrail(profile.totalMs)
+  const foreground = readingForeground()
+  const active = readingClock.active(performance.now(), foreground)
+  const minutes = Math.floor(trail.progressMs / 60000)
+  const label = state.pdf ? `${trail.nextStop} · ${minutes}/10 分` : '峡谷巡灯 · 查看地图'
+  $('reading-progress').textContent = label
+  $('trail-fill').style.width = `${trail.progressMs / LAMP_MS * 100}%`
+  const chip = $('reading-quests')
+  chip.classList.toggle('is-reading', active)
+  const status = !state.documentId ? '打开 PDF 后自动开始' : active ? '阅读中' : '计时暂停'
+  chip.title = `${status}。今日阅读 ${Math.floor((profile.days[dayKey()]?.ms || 0) / 60000)} 分钟，累计点亮 ${trail.lights} 盏。点击查看地图与任务。`
+  chip.setAttribute('aria-label', `${label}。${chip.title}`)
+
+  const quiet = $('quiet-reading')
+  const remaining = readingClock.quietRemainingMs
+  quiet.disabled = !state.documentId || state.loading
+  quiet.setAttribute('aria-pressed', String(remaining > 0))
+  quiet.textContent = remaining ? `${foreground ? '静读中' : '静读暂停'} · ${Math.ceil(remaining / 60000)} 分` : '静读 10 分钟'
+  quiet.title = remaining ? '点击提前结束静读，已经读过的时间会保留' : '在前台安静看这一篇文献，最多 10 分钟无需操作。离开窗口自动暂停。'
+  quiet.setAttribute('aria-label', `${quiet.textContent}。${quiet.title}`)
+}
+
+function showEarnedRewards(rewards) {
+  if (!rewards.length || loot?.isOpen()) return
+  $('loot-open').classList.add('has-rewards')
+  $('loot-open').title = '阅读奖励已到账，点击查看战利品'
+}
+
+async function creditReading(ms) {
+  if (!ms) return
+  const at = Date.now()
+  try {
+    const rewards = await profileStore.mutate(profile => recordReading(profile, ms, at))
+    showEarnedRewards(rewards)
+  } catch (error) { loot.notify(`阅读进度未保存：${error.message}`) }
+}
+
+function pauseReading() {
+  // Account for the partial five-second interval before looking at a reference or opening loot.
+  void creditReading(readingClock.pause(performance.now()))
+}
+
+function resumeReading() {
+  readingClock.reset()
+  readingClock.tick(performance.now(), readingForeground())
+  updateReadingHud()
 }
 async function hashBytes(bytes) {
   return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), n => n.toString(16).padStart(2, '0')).join('')
@@ -102,7 +145,7 @@ async function rewardSaved(snapshot, authored, reviewed, documentId, generation)
     const rewards = await profileStore.mutate(p => [...recordSavedMarks(p, documentId, marks), ...recordQuestionReviews(p, documentId, reviewIds)])
     if (generation === state.documentGeneration) for (const mark of marks) state.authoredIds.delete(mark.id)
     if (generation === state.documentGeneration) for (const id of reviewIds) state.reviewIds.delete(id)
-    if (rewards.length) loot.notify(`任务完成：${rewards.join('、')} · 奖励已进入战利品`)
+    showEarnedRewards(rewards)
   } catch (error) { loot.notify(`PDF 已保存，但任务进度未保存：${error.message}`) }
 }
 
@@ -888,6 +931,7 @@ async function loadFile(file, handle = null) {
   if (!isPdf(file)) { setStatus('请选择 PDF 文件'); return }
   if (state.loading || state.saving) { setStatus('请等待当前文献操作完成'); return }
   rememberPage()
+  pauseReading()
   state.loading = true
   try {
     keepComposerDraft()
@@ -898,7 +942,6 @@ async function loadFile(file, handle = null) {
         : '当前文献还有未写入 PDF 的改动。切换后可重新打开它恢复本地草稿。现在切换？'
       if (!window.confirm(message)) return
     }
-    readingClock.reset()
     setStatus('正在打开…')
     const raw = new Uint8Array(await file.arrayBuffer())
     const doc = await PDFDocument.load(raw.slice(), { updateMetadata: false })
@@ -920,6 +963,7 @@ async function loadFile(file, handle = null) {
     closeChatComposer()
     questionPanel.reset()
     state.documentGeneration++
+    readingClock.endQuiet()
     state.documentId = ''
     state.fileHandle = handle
     state.cleanBytes = clean.slice()
@@ -934,8 +978,7 @@ async function loadFile(file, handle = null) {
     await showPdf(state.cleanBytes.slice())
     state.documentId = documentId
     resumePage()
-    lastReadingInput = performance.now()
-    readingClock.activity(lastReadingInput)
+    readingClock.activity(performance.now())
     const details = [state.pings.length ? `${state.pings.length} 个标注` : '', drafts.tokens.size ? '本地草稿已恢复' : '',
       recovered?.skipped ? '文件中有已变更的标注，相关旧草稿已保留在本机' : '', warning].filter(Boolean)
     setStatus(`已打开 ${state.fileName}${details.length ? ' · ' + details.join(' · ') : ''}`)
@@ -944,7 +987,7 @@ async function loadFile(file, handle = null) {
   } finally {
     state.loading = false
     showDraftStatus()
-    updateReadingHud()
+    resumeReading()
   }
 }
 
@@ -1105,7 +1148,7 @@ function onKeyDown(event) {
     return
   }
   const plainEnter = event.key === 'Enter' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey
-  const nonControlTarget = !typingTarget(event.target) && !event.target?.closest?.('button, a, select, [role="button"]')
+  const nonControlTarget = !typingTarget(event.target) && !event.target?.closest?.('button, a, select, summary, [role="button"]')
   if (plainEnter && state.chatOpen && nonControlTarget) {
     event.preventDefault()
     event.stopPropagation()
@@ -1230,10 +1273,12 @@ function wire() {
     store: profileStore,
     onOpen() {
       suspendedChat = state.chatOpen ? { documentId: state.documentId, editId: state.editingNoteId } : null
-      dismissAlt(); closeChatComposer(); readingClock.reset(); updateReadingHud()
+      $('loot-open').classList.remove('has-rewards')
+      $('loot-open').title = '查看战利品、配置表情轮盘和阅读任务'
+      dismissAlt(); closeChatComposer(); pauseReading(); queueMicrotask(updateReadingHud)
     },
     onClose() {
-      readingClock.reset(); updateReadingHud()
+      resumeReading()
       if (suspendedChat?.documentId === state.documentId) queueMicrotask(() => openChatComposer(suspendedChat.editId))
     },
   })
@@ -1243,28 +1288,34 @@ function wire() {
   paintSelection()
   $('loot-open').addEventListener('click', () => loot.open())
   $('reading-quests').addEventListener('click', () => loot.open('quests'))
+  $('quiet-reading').addEventListener('click', () => {
+    if (!readingForeground()) return
+    const wasQuiet = readingClock.quietRemainingMs > 0
+    pauseReading()
+    if (wasQuiet) { readingClock.endQuiet(); resumeReading() }
+    else readingClock.startQuiet(performance.now())
+    updateReadingHud()
+  })
   for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel']) {
     document.addEventListener(type, event => {
-      if (event.isTrusted && !loot.isOpen() && state.documentId) {
-        lastReadingInput = performance.now(); readingClock.activity(lastReadingInput)
+      if (event.isTrusted && readingForeground()) {
+        readingClock.activity(performance.now())
       }
     }, { capture: true, passive: true })
   }
-  document.addEventListener('visibilitychange', () => { if (document.hidden) rememberPage(); readingClock.reset(); updateReadingHud() })
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { rememberPage(); pauseReading(); updateReadingHud() }
+    else resumeReading()
+  })
   window.addEventListener('pagehide', rememberPage)
   window.addEventListener('beforeunload', event => {
     if (state.drafts?.tokens.size) { event.preventDefault(); event.returnValue = '' }
   })
-  window.addEventListener('blur', () => { readingClock.reset(); updateReadingHud() })
+  window.addEventListener('blur', () => { pauseReading(); updateReadingHud() })
+  window.addEventListener('focus', resumeReading)
   window.addEventListener('storage', event => { if (event.key === PROFILE_KEY) profileStore.refresh() })
   setInterval(async () => {
-    const ms = readingClock.tick(performance.now(), readingActive())
-    if (ms) {
-      try {
-        const rewards = await profileStore.mutate(p => recordReading(p, ms))
-        if (rewards.length) loot.notify(`任务完成：${rewards.join('、')} · 奖励已进入战利品`)
-      } catch (error) { loot.notify(`阅读进度未保存：${error.message}`) }
-    }
+    await creditReading(readingClock.tick(performance.now(), readingForeground()))
     updateReadingHud()
   }, 5000)
   updateReadingHud()

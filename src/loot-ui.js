@@ -1,5 +1,6 @@
 import { ALL_EMOTES, CATALOG_INFO, pingById } from './pings.js'
 import { hasIcon, iconMarkup } from './ping-assets.js'
+import { renderTrailCard } from './reading-trail.js'
 import {
   DAILY_QUESTS, MILESTONE_QUESTS, EMOTE_COST, LEVEL_XP, STARTER_IDS,
   dayKey, usableWheel, canEquip, ownedEmote, equipEmote, unlockEmote, openChest, claimChest, questProgress,
@@ -21,7 +22,7 @@ export function mountLoot({ store, onOpen = () => {}, onClose = () => {} }) {
     <nav class="loot-tabs" aria-label="战利品功能">
       <button data-tab="collection" aria-current="page">表情藏品</button>
       <button data-tab="workshop">研究宝箱 <span id="chest-badge"></span></button>
-      <button data-tab="quests">阅读任务</button>
+      <button data-tab="quests">巡灯与任务</button>
       <span>让每一次认真阅读，都有所收获。</span>
     </nav>
     <div class="loot-body">
@@ -61,6 +62,7 @@ export function mountLoot({ store, onOpen = () => {}, onClose = () => {} }) {
   const $ = id => dialog.querySelector(`#${id}`)
   let tab = 'collection', slot = 0, selected = STARTER_IDS[0], page = 0, toastTimer, opener
   let shownDay = dayKey(), busy = false
+  let trailChapter = null
   const pageSize = 40
 
   function notify(message) {
@@ -136,11 +138,11 @@ export function mountLoot({ store, onOpen = () => {}, onClose = () => {} }) {
       const rewards = [`${q.xp} XP`, q.essence ? `${q.essence} 精粹` : '', q.chests ? `${q.chests} 宝箱` : ''].filter(Boolean).join(' + ')
       return `<article class="quest-card ${progress.claimed ? 'is-complete' : ''}"><div class="quest-symbol">${progress.claimed ? '✓' : '◇'}</div><div class="quest-copy"><h3>${q.title}</h3><p>${q.description}</p><progress max="${q.goal}" value="${progress.value}" aria-label="${q.title}"></progress><div class="quest-bottom"><span>${Math.floor(progress.value)} / ${q.goal}</span><span>${rewards}</span><strong>${progress.claimed ? '奖励已到账' : '进行中'}</strong></div></div></article>`
     }
-    $('quests-pane').innerHTML = `<div class="section-kicker">YOUR NEXT OBJECTIVE</div><h2>今天，向理解更进一步</h2>
+    $('quests-pane').innerHTML = `${renderTrailCard(p.totalMs, trailChapter, p.reviewReceipts.length)}
       <div class="reading-stats"><div><strong>${Math.floor((day?.ms || 0) / 60000)}<small> 分钟</small></strong><span>今日有效阅读</span></div><div><strong>${p.noteHashes.length}<small> 条</small></strong><span>累计有效笔记</span></div><div><strong>${p.activeDays.length}<small> 天</small></strong><span>累计阅读日</span></div></div>
       <h3 class="quest-group-title">每日任务 <span>${key} · 本地时间零点更新</span></h3><div class="quest-grid">${DAILY_QUESTS.map(card).join('')}</div>
       <h3 class="quest-group-title">成长里程碑 <span>长期有效，无需连续签到</span></h3><div class="quest-grid">${MILESTONE_QUESTS.map(card).join('')}</div>
-      <details class="quest-explanation"><summary>哪些阅读行为会被计入？</summary><p>打开 PDF 后，仅在阅读窗口位于前台、页面可见且最近 2 分钟有鼠标、滚动或键盘操作时计时。查看战利品、离开窗口、电脑休眠不计时。进度约每 5 秒更新。</p><p>标记必须是本次新建、保存时仍存在的标记；同一文献同一页每天只计一次。笔记需至少 12 个非空白字符且有 4 种不同字符；同文献相同内容、重复保存和重新打开不会反复增加笔记数。字数规则只用于计数，不代表内容质量。</p><p>每 200 XP 升一级并获得 1 个研究宝箱。存档保存在本机浏览器，不连接 Riot 账号。文件名、笔记正文和 PDF 不会存入任务存档或上传。换设备前可导出存档。</p></details>`
+      <details class="quest-explanation"><summary>哪些阅读行为会被计入？</summary><p>打开 PDF 后，普通阅读在前台自动计时，两分钟无操作会暂停。读公式或长段落时，点一次「静读 10 分钟」即可在本篇文献安静阅读。切到别处或打开战利品时暂停，返回后继续。静读用完会恢复普通计时。两种模式共用同一份阅读记录，约每五秒保存一次。</p><p>标记必须是本次新建、保存时仍存在的标记；同一文献同一页每天只计一次。笔记需至少 12 个非空白字符且有 4 种不同字符；同文献相同内容、重复保存和重新打开不会反复增加笔记数。字数规则只用于计数，不代表内容质量。</p><p>每 200 XP 升一级并获得 1 个研究宝箱。存档保存在本机浏览器，不连接 Riot 账号。文件名、笔记正文和 PDF 不会存入任务存档或上传。换设备前可导出存档。</p></details>`
   }
   function render() {
     dialog.dataset.tab = tab
@@ -159,9 +161,18 @@ export function mountLoot({ store, onOpen = () => {}, onClose = () => {} }) {
     if (tab === 'quests') renderQuests()
     shownDay = dayKey()
   }
-  const switchTab = name => { tab = name; render(); dialog.querySelector('.loot-content').scrollTop = 0 }
+  const switchTab = name => { tab = name; trailChapter = null; render(); dialog.querySelector('.loot-content').scrollTop = 0 }
   dialog.addEventListener('click', async event => {
     const target = event.target.closest('button'); if (!target) return
+    if (target.dataset.trailChapter !== undefined) {
+      const label = target.getAttribute('aria-label')
+      trailChapter = Number(target.dataset.trailChapter)
+      renderQuests()
+      const nav = [...dialog.querySelectorAll('[data-trail-chapter]:not(:disabled)')]
+      const nextFocus = nav.find(button => button.getAttribute('aria-label') === label) || nav[0]
+      nextFocus?.focus({ preventScroll: true })
+      return
+    }
     if (target.dataset.tab) switchTab(target.dataset.tab)
     if (target.dataset.slot !== undefined) { slot = Number(target.dataset.slot); renderWheel(); renderDetail() }
     if (target.dataset.emote) { selected = target.dataset.emote; renderDetail(); renderCollection() }
@@ -219,7 +230,7 @@ export function mountLoot({ store, onOpen = () => {}, onClose = () => {} }) {
   })
   setInterval(() => { if (dialog.open && dayKey() !== shownDay) render() }, 10000)
   return {
-    open(name = 'collection') { if (dialog.open) return; opener = document.activeElement; onOpen(); tab = name; render(); dialog.showModal() },
+    open(name = 'collection') { if (dialog.open) return; opener = document.activeElement; onOpen(); tab = name; trailChapter = null; render(); dialog.showModal() },
     isOpen: () => dialog.open,
     refresh() { if (dialog.open) render() },
     notify,

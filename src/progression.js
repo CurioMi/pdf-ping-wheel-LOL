@@ -3,6 +3,7 @@ import { ALL_EMOTES, EMOTES, pingById } from './pings.js'
 export const PROFILE_KEY = 'pdf-ping-wheel:loot:v1'
 export const EMOTE_COST = 100
 export const LEVEL_XP = 200
+export const QUIET_SESSION_MS = 10 * 60 * 1000
 export const STARTER_IDS = EMOTES.map(e => e.id)
 const validEmotes = new Set(ALL_EMOTES.map(e => e.id))
 const finiteInt = value => Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
@@ -187,13 +188,35 @@ export function recordQuestionReviews(profile, documentId, ids, key = dayKey()) 
 
 export function createReadingClock() {
   let previous = null, lastInput = -Infinity
+  let quietRemainingMs = 0
+  const recentlyActive = now => now - lastInput <= 120000
+  const active = (now, foreground) => foreground && (quietRemainingMs > 0 || recentlyActive(now))
+  function tick(now, foreground) {
+    const from = previous
+    previous = active(now, foreground) ? now : null
+    if (!foreground || from === null) return 0
+    const elapsed = now - from
+    if (elapsed <= 0 || elapsed > 15000) return 0
+    const quietElapsed = Math.min(elapsed, quietRemainingMs)
+    quietRemainingMs -= quietElapsed
+    const ordinaryElapsed = Math.max(0, Math.min(now, lastInput + 120000) - from)
+    return Math.max(quietElapsed, ordinaryElapsed)
+  }
   return {
-    activity(now) { lastInput = now },
+    activity(now) {
+      if (previous === null || (!recentlyActive(now) && !quietRemainingMs)) previous = now
+      lastInput = now
+    },
+    active,
+    get quietRemainingMs() { return quietRemainingMs },
+    startQuiet(now) { quietRemainingMs = QUIET_SESSION_MS; previous = now },
+    endQuiet() { quietRemainingMs = 0; previous = null },
     reset() { previous = null },
-    tick(now, active) {
-      const elapsed = previous === null ? 0 : now - previous
-      previous = active && now - lastInput <= 120000 ? now : null
-      return previous !== null && elapsed > 0 && elapsed <= 15000 ? elapsed : 0
+    tick,
+    pause(now) {
+      const credited = tick(now, true)
+      previous = null
+      return credited
     },
   }
 }

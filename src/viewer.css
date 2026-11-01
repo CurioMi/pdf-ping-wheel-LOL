@@ -54,6 +54,16 @@ button:focus-visible {
 #loot-open { color: #efd89d; border-color: #9d7a40; background: #292a28; white-space: nowrap; }
 .reading-hud { display: flex; align-items: center; gap: 16px; padding: 5px 16px 8px; border-bottom: 1px solid var(--line); color: #8ebec5; font-size: 12px; }
 .reading-hud button { padding: 3px 10px; background: transparent; border-color: #354e55; font-size: 12px; }
+.reading-hud .trail-chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 8px; color: #b4c3c4; text-align: left; }
+.trail-chip svg { color: #91a0a1; flex: none; }
+.trail-chip.is-reading svg { color: #d7b778; }
+.trail-meter { display: inline-block; overflow: hidden; width: 30px; height: 3px; border-radius: 2px; background: #32474c; }
+.trail-meter i { display: block; height: 100%; background: #bba779; }
+#quiet-reading { color: #9cb7bc; }
+#quiet-reading[aria-pressed="true"] { color: #c4ddce; border-color: #52786c; }
+#loot-open.has-rewards::after { content: ''; display: inline-block; width: 5px; height: 5px; margin-left: 4px; vertical-align: middle; border-radius: 50%; background: #e7c57e; }
+#help summary { width: fit-content; cursor: pointer; font-size: 12px; }
+#help p { margin: 4px 0; }
 #question-toggle { margin-left: auto; }
 #draft-state { color: #ccb77f; font-size: 11px; }
 .marker-sizes { display: flex; gap: 2px; align-items: center; }
@@ -177,6 +187,31 @@ button:focus-visible {
 .reward-choice strong { font-size: 14px; font-weight: 400; }
 .reward-choice small { font-size: 11px; color: #c1aa6d; }
 .reading-stats { display: flex; gap: 18px; margin: 23px 0; }
+.trail-card { overflow: hidden; border: 1px solid #3c5057; border-radius: 5px; background: #0c1a23; }
+#loot[data-tab="quests"] .loot-body { grid-template-columns: minmax(0, 1fr); }
+#loot[data-tab="quests"] .loot-loadout { display: none; }
+#quests-pane { max-width: 1040px; margin-inline: auto; }
+.trail-head, .trail-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 18px; }
+#loot .trail-head h2 { margin: 4px 0 0; font-size: 20px; }
+.trail-total { color: #a8b9bd; font-size: 12px; white-space: nowrap; }
+.trail-totals { display: grid; gap: 4px; text-align: right; color: #94b1b6; font-size: 11px; }
+.trail-total strong { color: #edd096; font-size: 19px; font-weight: 500; }
+.trail-scene { display: block; width: 100%; height: auto; }
+.trail-stops { list-style: none; margin: 0; padding: 12px 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid #34434a; }
+.trail-stops li { text-align: center; display: grid; gap: 4px; }
+.trail-stops strong { font-size: 12px; font-weight: 500; color: #a7b4b8; }
+.trail-stops span { font-size: 10px; color: #8b9ca4; }
+.trail-stops [data-trail-state="已点亮"] strong, .trail-stops [data-trail-state="已点亮"] span { color: #e2bf79; }
+.trail-stops [data-trail-state="在路上"] strong { color: #a2d1cf; }
+#loot .trail-entry { margin: 13px 18px 0; color: #d5c9aa; font-size: 13px; }
+.trail-journal { margin: 13px 18px 0; font-size: 13px; color: #d5c9aa; }
+.trail-journal summary { cursor: pointer; }
+.trail-journal small { margin-left: 10px; color: #8ca1ab; font-size: 10px; }
+.trail-journal ul { padding: 0; margin: 12px 0 0; list-style: none; color: #a5b7be; font-size: 12px; line-height: 1.8; }
+.trail-journal strong { font-weight: 500; color: #d4b77e; }
+.trail-foot { padding: 9px 18px 14px; flex-wrap: wrap; color: #8ca1ab; font-size: 11px; line-height: 1.6; }
+.trail-nav { display: flex; gap: 6px; }
+#loot .trail-nav button { padding: 4px 8px; color: #adbdc5; font-size: 11px; border-color: #364751; background: transparent; }
 .reading-stats > div { flex: 1; border-left: 2px solid #406d78; padding: 7px 15px; display: grid; gap: 8px; background: linear-gradient(90deg, #1a354355, transparent); }
 .reading-stats strong { font-weight: 400; color: #dfc68e; font-size: 28px; }
 .reading-stats small, .reading-stats span { font-size: 11px; color: #8ea9b7; }

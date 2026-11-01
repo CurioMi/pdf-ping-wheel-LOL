@@ -28,18 +28,25 @@
         <button id="fit" type="button" disabled>适应宽度</button>
       </div>
     </header>
-    <p id="help" class="help">
-      按住 Alt 并移动鼠标选择信号；G 放置普通信号，V 放置危险标记；H 放置敌方有视野标记；问号在信号轮盘中选择“敌人不见了”，点击问号可展开疑问备注。按住 T 选择表情，轻点 T 放置中心表情；Ctrl+6 亮牌。按 Enter 打开聊天式备注框，输入后 Enter 放置到鼠标所在的 PDF 页面，Shift+Enter 换行，Esc 关闭；双击备注可编辑。拖动标记移动，点选后 Delete 删除，Ctrl+Z 撤销。
-    </p>
+    <details id="help" class="help"><summary>阅读快捷键</summary>
+      <p>按住 Alt 移动鼠标选择信号。G 放置普通信号，V 放置危险标记，H 标记视野。点击问号可展开疑问备注。按住 T 选择表情，轻点 T 放置中心表情，Ctrl+6 亮牌。</p>
+      <p>Enter 打开或发送备注，Shift+Enter 换行，Esc 收起。双击备注可编辑，拖动标记可移动，Delete 删除，Ctrl+Z 撤销。</p>
+    </details>
     <p id="status" class="status" aria-live="polite"></p>
-    <div class="reading-hud"><span id="reading-progress">阅读峡谷 · 开始一份文献，积累你的战利品</span><span id="draft-state" aria-live="polite"></span>
+    <div class="reading-hud">
+      <button id="reading-quests" class="trail-chip" type="button" aria-label="查看峡谷巡灯地图与阅读任务">
+        <svg viewBox="0 0 20 22" width="15" height="17" aria-hidden="true"><path d="m10 1 7 5-2 11-5 3-5-3L3 6Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 7l3 5-3 4-3-4Z" fill="currentColor"/></svg>
+        <span id="reading-progress">峡谷巡灯</span><span class="trail-meter" aria-hidden="true"><i id="trail-fill"></i></span>
+      </button>
+      <button id="quiet-reading" type="button" aria-pressed="false" disabled>静读 10 分钟</button>
+      <span id="draft-state" aria-live="polite"></span>
       <div class="marker-sizes" role="group" aria-labelledby="marker-size-label" title="选中图标时会同时调整它的大小。新图标也使用所选尺寸。">
         <span id="marker-size-label">新标记大小</span>
         <button type="button" data-marker-size="small" aria-pressed="true">小</button>
         <button type="button" data-marker-size="medium" aria-pressed="false">中</button>
         <button type="button" data-marker-size="large" aria-pressed="false">大</button>
       </div>
-      <button id="question-toggle" type="button" aria-controls="question-panel" aria-expanded="false" disabled>文献疑问 (0)</button><button id="reading-quests" type="button">查看任务 →</button></div>
+      <button id="question-toggle" type="button" aria-controls="question-panel" aria-expanded="false" disabled>文献疑问 (0)</button></div>
     <div class="reader-workspace"><main id="stage">
       <section id="empty" class="empty">
         <h1>打开一份 PDF</h1>
