@@ -7,7 +7,8 @@ import {
   PDFNumber,
   decodePDFRawStream,
 } from 'pdf-lib'
-import { PINGS, STAMP_TYPES, NOTE, NOTE_MAX_CHARS, PING_SIZE, stampSize, pingById } from './pings.js'
+import { PINGS, STAMP_TYPES, NOTE, NOTE_MAX_CHARS, PING_SIZE, stampSize, pingById, questionText } from './pings.js'
+import { blankNotebook, validNotebook } from './notebook.js'
 
 // PDFPingWheel v2 uses native Stamp annotations. Version 1 files used tagged page-content streams and an Info-dictionary JSON payload;
 // Info index v3 stores portable emote PNG data; v4 also persists note text, while native annotations remain authoritative.
@@ -19,6 +20,24 @@ const ID_KEY = PDFName.of('id')
 const TYPE_KEY = PDFName.of('type')
 const X_KEY = PDFName.of('x')
 const Y_KEY = PDFName.of('y')
+const DOCUMENT_KEY = PDFName.of('PDFPingWheelDocument')
+const NOTEBOOK_KEY = PDFName.of('PDFPingWheelNotebook')
+
+// null leaves an unfamiliar or damaged notebook intact when other parts of the PDF are saved.
+export function readNotebook(pdfDoc) {
+  const info = existingInfoDict(pdfDoc)
+  if (!info?.has(NOTEBOOK_KEY)) return blankNotebook()
+  try {
+    const book = JSON.parse(info.lookup(NOTEBOOK_KEY).decodeText())
+    return validNotebook(book) ? book : null
+  } catch { return null }
+}
+
+export function readDocumentId(pdfDoc) {
+  const value = existingInfoDict(pdfDoc)?.lookup(DOCUMENT_KEY)
+  const id = value?.decodeText?.() || ''
+  return /^[a-f0-9]{64}$/.test(id) ? id : ''
+}
 
 function round2(n) {
   return Math.round(n * 100) / 100
@@ -80,6 +99,11 @@ function sanitizePings(list) {
       const text = typeof raw.text === 'string' ? raw.text.replace(/\r\n?/g, '\n').slice(0, NOTE_MAX_CHARS) : ''
       if (!text.trim()) continue
       ping.text = text
+    }
+    if (raw.type === 'question') {
+      ping.questionNote = questionText(raw.questionNote)
+      ping.answer = questionText(raw.answer)
+      ping.resolved = raw.resolved === true
     }
     pings.push(ping)
   }
@@ -169,6 +193,14 @@ function annotationPing(annotation, pageIndex) {
     if (!text.trim()) return null
     result.text = text.slice(0, NOTE_MAX_CHARS)
   }
+  if (type === 'question') {
+    const stored = data.has(PDFName.of('questionNote'))
+    const previousContents = readText(annotation, 'Contents')
+    const oldLabel = `PDF Ping Wheel — ${pingById(type).label}`
+    result.questionNote = questionText(stored ? readText(data, 'questionNote') : previousContents === oldLabel ? '' : previousContents)
+    result.answer = questionText(readText(data, 'answer'))
+    result.resolved = readNumber(data, 'resolved') === 1
+  }
   return result
 }
 
@@ -242,6 +274,7 @@ export function writePingPayload(pdfDoc, pings) {
       ...(ping.width ? { width: round2(ping.width) } : {}),
       ...(ping.height ? { height: round2(ping.height) } : {}),
       ...(ping.type === NOTE.id ? { text: ping.text } : {}),
+      ...(ping.type === 'question' ? { questionNote: ping.questionNote, answer: ping.answer, resolved: ping.resolved } : {}),
     })),
   }
   infoDict(pdfDoc).set(META_KEY, PDFHexString.fromText(JSON.stringify(payload)))
@@ -350,12 +383,20 @@ function addStampAnnotation(pdfDoc, page, ping, image) {
   })
   annotation.set(PDFName.of('NM'), PDFHexString.fromText(`${APP_PREFIX}${ping.id}`))
   const spec = pingById(ping.type)
-  annotation.set(PDFName.of('Contents'), PDFHexString.fromText(ping.type === NOTE.id ? ping.text : `PDF Ping Wheel — ${spec?.label || ping.type}`))
+  let contents = ping.type === NOTE.id ? ping.text : `PDF Ping Wheel — ${spec?.label || ping.type}`
+  if (ping.type === 'question') {
+    metadata.set(PDFName.of('questionNote'), PDFHexString.fromText(ping.questionNote))
+    metadata.set(PDFName.of('answer'), PDFHexString.fromText(ping.answer))
+    metadata.set(PDFName.of('resolved'), PDFNumber.of(ping.resolved ? 1 : 0))
+    const discussion = [ping.questionNote, ping.answer ? `我的理解\n${ping.answer}` : ''].filter(Boolean).join('\n\n')
+    if (discussion) contents = discussion
+  }
+  annotation.set(PDFName.of('Contents'), PDFHexString.fromText(contents))
   annotation.set(META_KEY, metadata)
   page.node.addAnnot(context.register(annotation))
 }
 
-export async function buildSavedPdf(cleanBytes, pings, pngByType) {
+export async function buildSavedPdf(cleanBytes, pings, pngByType, { documentId = '', notebook } = {}) {
   const pdfDoc = await PDFDocument.load(cleanBytes.slice(), { updateMetadata: false })
   stripPluginArtifacts(pdfDoc)
   const pages = pdfDoc.getPages()
@@ -385,5 +426,11 @@ export async function buildSavedPdf(cleanBytes, pings, pngByType) {
   }
 
   writePingPayload(pdfDoc, safePings)
+  if (notebook != null) {
+    if (!validNotebook(notebook)) throw new Error('论文笔记格式有误')
+    if (notebook.summary || notebook.entries.length) infoDict(pdfDoc).set(NOTEBOOK_KEY, PDFHexString.fromText(JSON.stringify(notebook)))
+    else infoDict(pdfDoc).delete(NOTEBOOK_KEY)
+  }
+  if (/^[a-f0-9]{64}$/.test(documentId)) infoDict(pdfDoc).set(DOCUMENT_KEY, PDFHexString.fromText(documentId))
   return pdfDoc.save()
 }

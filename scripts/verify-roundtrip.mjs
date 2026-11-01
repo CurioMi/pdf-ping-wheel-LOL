@@ -4,11 +4,13 @@ import {
   buildSavedPdf,
   describeBakedPings,
   describePingAnnotations,
+  readNotebook,
   readPingPayload,
   stripPluginArtifacts,
 } from '../src/pdf-io.js'
 import { encodePng } from './png.mjs'
 import { PINGS, STAMP_TYPES, NOTE } from '../src/pings.js'
+import { blankNotebook, notebookText } from '../src/notebook.js'
 
 function pageText(pdfDoc) {
   let out = ''
@@ -38,6 +40,33 @@ const originalNote = source.context.obj({ Type: 'Annot', Subtype: 'Text', Rect: 
 originalNote.set(PDFName.of('Contents'), PDFHexString.fromText('Keep this existing PDF note'))
 page.node.addAnnot(source.context.register(originalNote))
 const clean = await source.save()
+
+// The notebook is portable text and never changes page streams or ordinary annotations.
+assert.deepEqual(readNotebook(source), blankNotebook())
+const notebook = { v: 1, summary: '我的心得 📝\n还想再看一遍。', entries: [
+  { id: 'entry-a', page: 0, offset: 0.62, text: '核对单位\n以及 <p> 的含义。' },
+] }
+const withBook = await PDFDocument.load(await buildSavedPdf(clean, [], {}, { notebook }))
+assert.deepEqual(readNotebook(withBook), notebook)
+const withoutBook = await PDFDocument.load(await buildSavedPdf(clean, [], {}))
+assert.equal(pageText(withBook), pageText(withoutBook))
+assert.equal(withBook.getPages()[0].node.normalizedEntries().Annots.size(), 1)
+stripPluginArtifacts(withBook)
+assert.deepEqual(readNotebook(withBook), notebook)
+const withBookBytes = await withBook.save()
+assert.deepEqual(readNotebook(await PDFDocument.load(await buildSavedPdf(withBookBytes, [], {}))), notebook)
+const cleared = await PDFDocument.load(await buildSavedPdf(withBookBytes, [], {}, { notebook: blankNotebook() }))
+assert.deepEqual(readNotebook(cleared), blankNotebook())
+assert.equal(notebookText(notebook, '测试.pdf'), '测试.pdf · 论文笔记\n\n整篇心得\n我的心得 📝\n还想再看一遍。\n\n第 1 页\n核对单位\n以及 <p> 的含义。\n')
+const bookKey = PDFName.of('PDFPingWheelNotebook')
+const getInfo = doc => doc.context.lookup(doc.context.trailerInfo.Info)
+assert(!getInfo(cleared).has(bookKey))
+for (const unknown of ['{"v":2,"extra":"保留旧数据"}', '{', '{"v":1,"summary":null,"entries":[]}']) {
+  getInfo(withBook).set(bookKey, PDFHexString.fromText(unknown))
+  assert.equal(readNotebook(withBook), null)
+  const preserved = await PDFDocument.load(await buildSavedPdf(await withBook.save(), [], {}, { notebook: null }))
+  assert.equal(getInfo(preserved).lookup(bookKey).decodeText(), unknown)
+}
 
 const ping = { id: 'ping-1', page: 0, x: 180.25, y: 400.5, type: 'caution' }
 const saved = await buildSavedPdf(clean, [ping], pngByType)
@@ -120,6 +149,25 @@ assert.equal(noteAnnotation.lookup(PDFName.of('Contents'), PDFHexString).decodeT
 
 // Emote PNG bytes are indexed once in the PDF metadata so a second machine can restore the overlay.
 const emoteData = Buffer.from(png).toString('base64')
+// A question's expanded text belongs to the stamp's comment, never to the visible page art.
+const questions = [18, 27, 36].map((size, i) => ({ ...ping, id: `question-${i}`, type: 'question', width: size, height: size,
+  questionNote: '这组数据为何归一化？\n<&>', answer: '为了比较不同量纲。', resolved: i === 0 }))
+const questionDoc = await PDFDocument.load(await buildSavedPdf(clean, questions, pngByType))
+const reopenedQuestions = readPingPayload(questionDoc).pings
+for (const [index, mark] of reopenedQuestions.entries()) {
+  assert.equal(mark.width, questions[index].width); assert.equal(mark.height, questions[index].height)
+  assert.equal(mark.questionNote, questions[index].questionNote); assert.equal(mark.answer, questions[index].answer)
+  assert.equal(mark.resolved, questions[index].resolved)
+  const annot = questionDoc.context.lookup(questionDoc.getPages()[0].node.normalizedEntries().Annots.get(index + 1))
+  assert(annot.lookup(PDFName.of('Contents'), PDFHexString).decodeText().includes(mark.answer))
+}
+// A pre-v1.6.1 question has only its generic display label. That label is not a user note.
+const oldQuestion = questionDoc.context.lookup(questionDoc.getPages()[0].node.normalizedEntries().Annots.get(3))
+const oldMeta = oldQuestion.lookup(PDFName.of('PDFPingWheel'), PDFDict)
+for (const key of ['questionNote', 'answer', 'resolved']) oldMeta.delete(PDFName.of(key))
+oldQuestion.set(PDFName.of('Contents'), PDFHexString.fromText('PDF Ping Wheel — 敌人不见了'))
+const oldMark = readPingPayload(questionDoc).pings[2]
+assert.equal(oldMark.questionNote, ''); assert.equal(oldMark.resolved, false); assert.equal(oldMark.width, 36)
 const emoteSaved = await buildSavedPdf(clean, [{ ...ping, id: 'emote-test', type: 'emote_thumb', assetData: emoteData }], pngByType)
 const emoteDoc = await PDFDocument.load(emoteSaved)
 const emotePayload = readPingPayload(emoteDoc)
@@ -165,4 +213,4 @@ stripPluginArtifacts(legacyReopened)
 assert.equal(describeBakedPings(legacyReopened).length, 0, 'legacy image stream not stripped')
 assert(pageText(legacyReopened).includes('LEGACY TEXT') || pageText(legacyReopened).includes('4C45474143592054455854'), 'legacy cleanup removed original text')
 
-console.log('PASS: native Stamp appearance, editable metadata, moved-Rect recovery, cleanup, 19 stamp types, portable emote image data, persistent text notes, empty save, and v1 compatibility')
+console.log(`PASS: native Stamp appearance, editable metadata, moved-Rect recovery, cleanup, ${STAMP_TYPES.length} stamp types, portable emote image data, persistent text notes, empty save, and v1 compatibility`)

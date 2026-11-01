@@ -57,3 +57,6 @@ for (const file of wavs) {
 }
 console.log('Validated 19 PNG assets and 9 WAV assets.')
 NODE
+
+# Complete emote library, pinned to the checked-in catalog snapshot.
+node scripts/sync-emotes.mjs --download-only

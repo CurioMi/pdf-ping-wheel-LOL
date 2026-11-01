@@ -1,0 +1,207 @@
+import { notebookPart, setNotebookPart, validEntry } from './notebook.js'
+
+// Keep unsaved changes by document and item. PDF bytes are never cached here.
+let database
+let pending = Promise.resolve()
+
+function openDatabase() {
+  if (!database) database = new Promise((resolve, reject) => {
+    const request = indexedDB.open('pdf-ping-wheel-reading', 1)
+    request.onupgradeneeded = () => {
+      const store = request.result.createObjectStore('drafts', { keyPath: ['documentId', 'item'] })
+      store.createIndex('document', 'documentId')
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => { database = null; reject(request.error) }
+  })
+  return database
+}
+
+function enqueue(operation) {
+  const run = pending.then(async () => {
+    const db = await openDatabase()
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('drafts', 'readwrite')
+      tx.oncomplete = resolve
+      tx.onabort = () => reject(tx.error || new Error('本地草稿写入中断'))
+      operation(tx.objectStore('drafts'))
+    })
+  })
+  pending = run.catch(() => {})
+  return run
+}
+
+export function putDraft(record) {
+  return enqueue(store => store.put(record))
+}
+
+// A save may finish after another edit or after a different tab has written a newer draft.
+export function removeDraft(documentId, item, token) {
+  return enqueue(store => {
+    const key = [documentId, item]
+    const request = store.get(key)
+    request.onsuccess = () => { if (request.result?.token === token) store.delete(key) }
+  })
+}
+
+export async function readDrafts(documentId) {
+  await pending
+  const db = await openDatabase()
+  return new Promise((resolve, reject) => {
+    const request = db.transaction('drafts').objectStore('drafts').index('document').getAll(documentId)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+export function flushDrafts() { return pending }
+
+export function stampSignature(stamp) {
+  if (!stamp) return null
+  return JSON.stringify([stamp.type, stamp.page, stamp.x, stamp.y, stamp.width, stamp.height,
+    stamp.text || '', stamp.questionNote || '', stamp.answer || '', Boolean(stamp.resolved)])
+}
+
+export class DocumentDrafts {
+  constructor(documentId, marks, onChange, notebook = null, sourceHash = documentId) {
+    this.documentId = documentId
+    this.sourceHash = sourceHash
+    this.exportedItems = new Set()
+    this.base = new Map(marks.map(mark => [mark.id, stampSignature(mark)]))
+    this.bookBase = notebook
+    this.tokens = new Map()
+    this.composers = new Map()
+    this.onChange = onChange
+    this.writeFailed = false
+  }
+
+  async restore(marks, pageCount) {
+    const results = new Map(marks.map(mark => [mark.id, mark]))
+    const notebook = structuredClone(this.bookBase)
+    const authored = new Set(), reviews = new Set()
+    let skipped = 0
+    const records = await readDrafts(this.documentId)
+    // A browser download can be cancelled. Reconstruct the exported edits only on the exact input file.
+    const prefix = `copy:${this.sourceHash}:`
+    for (const record of records) {
+      if (!record.item.startsWith('copy:')) continue
+      if (record.outputHash === this.sourceHash) {
+        removeDraft(this.documentId, record.item, record.token).catch(() => this.fail())
+        continue
+      }
+      if (!record.item.startsWith(prefix)) continue
+      const item = record.item.slice(prefix.length), key = item.slice(5)
+      if (item.startsWith('mark:')) {
+        if (record.value === null) results.delete(key)
+        else if (record.value?.id === key && record.value.page >= 0 && record.value.page < pageCount) results.set(key, record.value)
+        else continue
+      } else if (item.startsWith('book:') && notebook) {
+        if (key === 'summary' ? typeof record.value !== 'string' :
+          record.value !== null && (!validEntry(record.value) || record.value.id !== key)) continue
+        setNotebookPart(notebook, key, record.value)
+      } else continue
+      this.exportedItems.add(item)
+    }
+    if (this.exportedItems.size) {
+      this.base = new Map([...results.values()].map(mark => [mark.id, stampSignature(mark)]))
+      this.bookBase = structuredClone(notebook)
+    }
+    for (const record of records) {
+      if (record.item.startsWith('chat:')) {
+        this.composers.set(record.item, record.value)
+      } else if (record.item.startsWith('book:')) {
+        const key = record.item.slice(5)
+        const valid = key === 'summary' ? typeof record.value === 'string'
+          : record.value === null || (validEntry(record.value) && record.value.id === key)
+        if (!notebook || !valid || record.base !== JSON.stringify(notebookPart(this.bookBase, key))) {
+          skipped++
+          continue
+        }
+        setNotebookPart(notebook, key, record.value)
+      } else if (record.item.startsWith('mark:')) {
+        const id = record.item.slice(5)
+        // Another PDF editor may have changed a mark or removed a page since the draft was written.
+        if (record.base !== (this.base.get(id) ?? null) || (record.value && record.value.page >= pageCount)) {
+          skipped++
+          continue
+        }
+        if (record.value) results.set(id, record.value)
+        else results.delete(id)
+        if (record.authored) authored.add(id)
+        if (record.reviewed) reviews.add(id)
+      } else continue
+      this.tokens.set(record.item, record.token)
+    }
+    return { marks: [...results.values()], authored, reviews, skipped, notebook, fromCopy: this.exportedItems.size > 0 }
+  }
+
+  async keepDownload(snapshot, book, capturedItems, outputHash) {
+    const items = new Set([...this.exportedItems, ...capturedItems].filter(item => item.startsWith('mark:') || (book && item.startsWith('book:'))))
+    if (!items.size) return
+    const marks = new Map(snapshot.map(mark => [mark.id, mark]))
+    await enqueue(store => {
+      for (const item of items) {
+        const key = item.slice(5), value = item.startsWith('book:') ? notebookPart(book, key) : marks.get(key) ?? null
+        store.put({ documentId: this.documentId, item: `copy:${this.sourceHash}:${item}`, value, outputHash, token: crypto.randomUUID() })
+      }
+    })
+    this.exportedItems = items
+  }
+
+  write(item, fields) {
+    const token = crypto.randomUUID()
+    this.tokens.set(item, token)
+    putDraft({ ...fields, documentId: this.documentId, item, token }).catch(() => this.fail())
+    this.onChange()
+  }
+
+  drop(item) {
+    const token = this.tokens.get(item)
+    if (!token) return
+    this.tokens.delete(item)
+    removeDraft(this.documentId, item, token).catch(() => this.fail())
+    this.onChange()
+  }
+
+  fail() { this.writeFailed = true; this.onChange() }
+
+  mark(id, value, authored, reviewed) {
+    const base = this.base.get(id) ?? null
+    if (stampSignature(value) === base) this.drop(`mark:${id}`)
+    else this.write(`mark:${id}`, { value: value ? { ...value } : null, base, authored, reviewed })
+  }
+
+  composer(id, value) {
+    const item = `chat:${id || 'new'}`
+    if (!value) { this.composers.delete(item); this.drop(item); return }
+    this.composers.set(item, value)
+    this.write(item, { value })
+  }
+
+  notebook(key, value) {
+    const base = JSON.stringify(notebookPart(this.bookBase, key))
+    if (JSON.stringify(value) === base) this.drop(`book:${key}`)
+    else this.write(`book:${key}`, { value, base })
+  }
+
+  rebaseNotebook(snapshot, current, capturedItems) {
+    if (!snapshot) return
+    this.bookBase = snapshot
+    for (const item of new Set([...capturedItems, ...this.tokens.keys()])) {
+      if (item.startsWith('book:')) {
+        const key = item.slice(5)
+        this.notebook(key, notebookPart(current, key))
+      }
+    }
+  }
+
+  rebase(snapshot, current, authored, reviews, capturedItems) {
+    this.base = new Map(snapshot.map(mark => [mark.id, stampSignature(mark)]))
+    const currentById = new Map(current.map(mark => [mark.id, mark]))
+    for (const item of new Set([...capturedItems, ...this.tokens.keys()])) {
+      if (!item.startsWith('mark:')) continue
+      const id = item.slice(5)
+      this.mark(id, currentById.get(id), authored.has(id), reviews.has(id))
+    }
+  }
+}

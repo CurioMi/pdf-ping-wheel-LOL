@@ -2,14 +2,15 @@
  * Optional Riot assets are installed locally by the user. No network requests
  * are made by the extension at runtime; SVG/emoji fallbacks remain available.
  */
-import { PINGS, EMOTES, MASTERY, STAMP_TYPES, pingBadgeSvg } from './pings.js'
+import { PINGS, EMOTES, ALL_EMOTES, MASTERY, pingById, pingBadgeSvg } from './pings.js'
 
 const icons = new Map()
 const sounds = new Set()
 const pngBytes = new Map()
+const pendingPng = new Map()
 
 export function iconUrl(stamp) {
-  const spec = typeof stamp === 'string' ? STAMP_TYPES.find((item) => item.id === stamp) : stamp
+  const spec = typeof stamp === 'string' ? pingById(stamp) : stamp
   if (!spec) return ''
   if (spec.category === 'emote') return `./riot/emotes/${spec.icon}`
   if (spec.category === 'mastery') return `./riot/mastery/${spec.icon}`
@@ -22,7 +23,7 @@ export function originalPng(type) { return pngBytes.get(type) || null }
 
 export function iconMarkup(stamp, px = 64) {
   if (hasIcon(stamp.id)) {
-    return `<img class="${stamp.category === 'emote' ? 'emote-art' : 'ping-art'}" width="${px}" height="${px}" src="${iconUrl(stamp)}" alt="" draggable="false">`
+    return `<img class="${stamp.category === 'emote' ? 'emote-art' : 'ping-art'}" width="${px}" height="${px}" src="${iconUrl(stamp)}" alt="" draggable="false" loading="lazy">`
   }
   return pingBadgeSvg(stamp, px)
 }
@@ -47,8 +48,25 @@ async function localBytes(url) {
   return new Uint8Array(await res.arrayBuffer())
 }
 
+export async function ensureOriginalPng(type) {
+  if (pngBytes.has(type)) return pngBytes.get(type)
+  if (!hasIcon(type)) return null
+  if (!pendingPng.has(type)) pendingPng.set(type, (async () => {
+    try {
+      const bytes = await localBytes(iconUrl(type))
+      if (!isPng(bytes)) throw new Error('Invalid local emote image')
+      // Thousands of emotes are available; only recently used images need raw bytes in memory.
+      if (pngBytes.size >= 64) pngBytes.delete(pngBytes.keys().next().value)
+      pngBytes.set(type, bytes)
+      return bytes
+    } catch { icons.delete(type); return null }
+    finally { pendingPng.delete(type) }
+  })())
+  return pendingPng.get(type)
+}
+
 export async function initializePingAssets() {
-  await Promise.all(STAMP_TYPES.map(async (stamp) => {
+  await Promise.all([...PINGS, ...EMOTES, MASTERY].map(async (stamp) => {
     try {
       const bytes = await localBytes(iconUrl(stamp))
       if (isPng(bytes)) {
@@ -57,6 +75,13 @@ export async function initializePingAssets() {
       }
     } catch { /* Missing or unsupported local asset; fallback SVG/emoji. */ }
   }))
+  try {
+    const response = await fetch('./riot/emotes/catalog-index.json')
+    if (response.ok) {
+      const index = await response.json()
+      for (const id of index.ids || []) if (pingById(id)?.category === 'emote') icons.set(id, true)
+    }
+  } catch { /* Source-only builds keep usable starter fallbacks. */ }
   await Promise.all(PINGS.map(async (ping) => {
     try {
       if (isWav(await localBytes(soundUrl(ping)))) sounds.add(ping.id)
@@ -65,9 +90,9 @@ export async function initializePingAssets() {
   return {
     icons: icons.size,
     pings: PINGS.filter((p) => icons.has(p.id)).length,
-    emotes: EMOTES.filter((p) => icons.has(p.id)).length,
+    emotes: ALL_EMOTES.filter((p) => icons.has(p.id)).length,
     mastery: icons.has(MASTERY.id) ? 1 : 0,
     sounds: sounds.size,
-    total: STAMP_TYPES.length,
+    total: PINGS.length + ALL_EMOTES.length + 1,
   }
 }

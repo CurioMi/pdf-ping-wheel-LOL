@@ -308,7 +308,7 @@ async function main() {
       }
     })()`)
     await evalPage("document.querySelector('#save').click()")
-    await waitFor(browser, sessionId, "document.querySelector('#status').textContent.includes('已下载')")
+    await waitFor(browser, sessionId, "document.querySelector('#status').textContent.includes('已请求下载')")
     const bytes = await evalPage(`(async () => {
       const response = await fetch(window.__download.href)
       return Array.from(new Uint8Array(await response.arrayBuffer()))
